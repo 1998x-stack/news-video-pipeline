@@ -39,7 +39,7 @@ flowchart TD
 
 ## 缓存与可恢复性
 
-`run_id=SHA256(raw_input_bytes + canonical_config + engine_version)[0:16]`。同一 `run_id` 加 POSIX 文件锁以避免同一输出目录同时写入。TTS 句子缓存使用文本+语音配置+引擎版本的独立哈希。完成的输出目录带有 Manifest 哈希，可验证完整性后直接复用；损坏则重算。构建中使用 `.building-*` 临时目录，失败后保留供排查。
+`run_id=SHA256(raw_input_bytes + canonical_config + source_url + engine_version)[0:16]`。同一 `run_id` 加 POSIX 文件锁以避免同一输出目录同时写入。TTS 句子缓存使用文本+语音配置+引擎版本的独立哈希。完成的输出目录带有 Manifest 哈希，可验证完整性后直接复用；损坏则重算。构建中使用 `.building-*` 临时目录，失败后保留供排查。
 
 **范围说明**：这是 v0.1 的「结果级跳过 + TTS 句子缓存」，尚不是分步骤缓存恢复。后续应引入 `StageArtifact` DAG，满足 LLM/素材/布局粒度的缓存并对工具、字体、模型二进制做版本锁定。
 

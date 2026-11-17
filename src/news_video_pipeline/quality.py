@@ -7,6 +7,8 @@ import re
 import wave
 from pathlib import Path
 
+from pptx import Presentation
+
 from .timeline import validate_timeline
 from .video import ffprobe
 
@@ -40,6 +42,10 @@ def validate_outputs(workspace: Path, scenes: list, timeline: dict, cfg: dict) -
     missing = [str(x) for x in expected if not x.is_file() or x.stat().st_size < 10]
     if missing:
         raise ValueError(f"Missing/empty outputs: {missing}")
+    pptx_count = len(Presentation(str(workspace / "presentation" / "daily.pptx")).slides)
+    image_count = len(list((workspace / "presentation" / "slides").glob("slide_*.png")))
+    if pptx_count != len(scenes) or image_count != len(scenes):
+        raise ValueError("PPTX/PNG slide count does not match timeline")
     with wave.open(str(workspace / "audio" / "narration.wav"), "rb") as stream:
         duration = 1000 * stream.getnframes() / stream.getframerate()
     if abs(duration - timeline["duration_ms"]) > 1.1:

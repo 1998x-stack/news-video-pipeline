@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/1998x-stack/news-video-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/1998x-stack/news-video-pipeline/actions/workflows/ci.yml)
 
-**状态：v0.1.0 可运行的生产内核（非无人审核发布系统）**。支持输入：新闻联播文字稿、普通新闻稿、长文章，格式为 `.txt`、`.md` 或 JSON `{ "title": "...", "body": "..." }`。
+**状态：v0.1.1 可运行的生产内核（非无人审核发布系统）**。支持输入：新闻联播文字稿、普通新闻稿、长文章，格式为 `.txt`、`.md` 或 JSON `{ "title": "...", "body": "..." }`。
 
 核心原则：**先生成逐句音频，以实际 PCM 采样数生成统一 timeline，所有产物均从同一个场景模型派生。** 不用 Whisper 猜测已知 TTS 句子时间戳。
 
