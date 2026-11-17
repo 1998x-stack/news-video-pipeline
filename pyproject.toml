@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "news-video-pipeline"
+version = "0.1.0"
+description = "Reproducible text-to-PPTX, narration, SRT, timeline and MP4 production engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = ["Pillow>=10.0", "python-pptx>=0.6.23", "PyYAML>=6.0"]
+
+[project.optional-dependencies]
+edge = ["edge-tts>=6.1"]
+llm = ["openai>=1.50"]
+whisper = ["faster-whisper>=1.0"]
+test = ["pytest>=8"]
+
+[project.scripts]
+news-video = "news_video_pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+news_video_pipeline = ["default.yaml"]

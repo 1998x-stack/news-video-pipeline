@@ -1,0 +1,29 @@
+project:
+  language: zh-CN
+  title_prefix: 政策新闻解读
+planner:
+  provider: heuristic   # heuristic | openai-compatible
+  max_chars_per_scene: 125
+  max_scenes: 16
+  model: ''
+  base_url: ''   # defaults to OPENAI_BASE_URL
+  temperature: 0
+voice:
+  provider: espeak       # espeak | edge | synthetic (TEST ONLY)
+  name: zh
+  rate: 155
+  pause_ms: 260
+  sample_rate: 24000
+  edge_rate: '+0%'
+render:
+  width: 1280
+  height: 720
+  fps: 25
+  font_path: ''
+  embed_subtitles: false
+quality:
+  max_duration_diff_ms: 160
+  whisper_check: false
+  whisper_model: small
+  whisper_device: cpu
+  min_transcript_similarity: 0.60

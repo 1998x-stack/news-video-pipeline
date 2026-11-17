@@ -1,0 +1,4 @@
+voice:
+  provider: edge
+  name: zh-CN-XiaoxiaoNeural
+  edge_rate: '+0%'

@@ -1,0 +1,12 @@
+planner:
+  provider: openai-compatible
+  max_scenes: 16
+  temperature: 0
+voice:
+  provider: espeak
+  name: zh
+quality:
+  whisper_check: true
+  whisper_model: small
+  whisper_device: cpu
+  min_transcript_similarity: 0.60
