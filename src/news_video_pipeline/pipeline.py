@@ -102,9 +102,40 @@ def run(input_path: Path, output_root: Path, cfg: dict, *, force: bool = False, 
             raise
 
 
+def verify_manifest(directory: Path) -> dict:
+    """Fail closed on a missing, failed, tampered or unsafe manifest."""
+    directory = directory.resolve()
+    manifest_file = directory / "manifest.json"
+    if not manifest_file.is_file():
+        raise FileNotFoundError(manifest_file)
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    if manifest.get("status") != "qa_passed":
+        raise ValueError(f"Manifest status is not qa_passed: {manifest.get('status')!r}")
+    assets = manifest.get("sha256")
+    if not isinstance(assets, dict) or not assets:
+        raise ValueError("Manifest has no file hashes; cannot verify output integrity")
+    for name, digest in assets.items():
+        if not isinstance(name, str) or not isinstance(digest, str):
+            raise ValueError("Malformed manifest hash entry")
+        path = (directory / name).resolve()
+        if not path.is_relative_to(directory) or not path.is_file():
+            raise ValueError(f"Unsafe or missing manifest asset: {name}")
+        if file_hash(path) != digest:
+            raise ValueError(f"Output file hash mismatch: {name}")
+    return manifest
+
+
 def validate_existing(directory: Path, cfg: dict) -> dict:
+    manifest = verify_manifest(directory)
     directory = directory.resolve()
     scenes_data = json.loads((directory / "scenes.json").read_text(encoding="utf-8"))
     scenes = [Scene(**{**scene, "sentences": tuple(scene["sentences"])}) for scene in scenes_data]
     timeline = json.loads((directory / "timeline.json").read_text(encoding="utf-8"))
-    return validate_outputs(directory, scenes, timeline, cfg)
+    return {
+        **validate_outputs(directory, scenes, timeline, cfg),
+        "run_id": manifest.get("run_id"),
+        "assets_verified": len(manifest["sha256"]),
+        "engine_version": manifest.get("engine_version"),
+        "public_release_approved": False,
+        "human_review_required": ["news facts", "rights/licensing", "platform release"],
+    }

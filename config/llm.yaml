@@ -1,0 +1,30 @@
+# Optional OpenAI-compatible planner (no Whisper re-check).
+# Credentials come from the environment only: OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL.
+#
+#   export OPENAI_API_KEY=...                       # never commit a real key
+#   export OPENAI_BASE_URL=https://endpoint.example/v1
+#   export OPENAI_MODEL=your-model-id
+#   news-video plan --input manuscript.md --config config/llm.yaml
+#   news-video run  --input manuscript.md --config config/llm.yaml --tts espeak
+planner:
+  provider: openai-compatible
+  # Whole-episode transcripts need this ceiling; never truncate the manuscript.
+  max_scenes: 120
+  temperature: 0
+  # Thinking gateways often share max_tokens between the hidden reasoning trace and
+  # the answer, and can take minutes per manuscript. `reasoning_effort: none`
+  # disables that trace. Verified locally: a 1559-character 新闻联播 lead manuscript
+  # went from a hard 90 s timeout to ~40 s. Raise timeout_s if your endpoint is slow.
+  timeout_s: 240
+  max_total_s: 900        # hard wall-clock ceiling for one planning call
+  max_tokens: 8192
+  max_retries: 1
+  reasoning_effort: none
+  # Grounding guard: narration must stay inside the source text or the run fails.
+  min_source_coverage: 0.75
+voice:
+  provider: espeak
+  name: zh
+  rate: 155
+quality:
+  whisper_check: false

@@ -8,6 +8,14 @@ planner:
   model: ''
   base_url: ''   # defaults to OPENAI_BASE_URL
   temperature: 0
+  # openai-compatible only. Thinking gateways often share max_tokens between the
+  # hidden reasoning trace and the answer, and can take minutes per manuscript.
+  timeout_s: 240          # per-read timeout; requests are streamed so long calls survive
+  max_total_s: 900        # hard wall-clock ceiling for one planning call
+  max_tokens: 8192        # reasoning + answer budget
+  max_retries: 1
+  reasoning_effort: ''    # e.g. 'none' to suppress runaway reasoning (empty = omit field)
+  min_source_coverage: 0.75  # grounding guard: matched source characters / narration characters
 voice:
   provider: espeak       # espeak | edge | synthetic (TEST ONLY)
   name: zh

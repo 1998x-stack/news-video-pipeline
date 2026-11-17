@@ -31,6 +31,16 @@ def load_config(path: str | Path | None = None) -> dict:
         raise ValueError("Unsupported voice.provider")
     if config["planner"]["provider"] not in {"heuristic", "openai-compatible"}:
         raise ValueError("Unsupported planner.provider")
+    if float(config["planner"]["timeout_s"]) <= 0:
+        raise ValueError("planner.timeout_s must be positive")
+    if float(config["planner"]["max_total_s"]) <= 0:
+        raise ValueError("planner.max_total_s must be positive")
+    if int(config["planner"]["max_tokens"]) < 256:
+        raise ValueError("planner.max_tokens must be at least 256")
+    if int(config["planner"]["max_retries"]) < 0:
+        raise ValueError("planner.max_retries must not be negative")
+    if not 0 < float(config["planner"]["min_source_coverage"]) <= 1:
+        raise ValueError("planner.min_source_coverage must be in (0, 1]")
     if int(config["voice"]["sample_rate"]) not in {16000, 22050, 24000, 44100, 48000}:
         raise ValueError("Unsupported sample rate")
     if config["render"].get("embed_subtitles"):

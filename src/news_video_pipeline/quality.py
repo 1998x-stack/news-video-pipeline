@@ -36,7 +36,8 @@ def transcript_similarity(audio: Path, expected: str, cfg: dict) -> float:
 
 def validate_outputs(workspace: Path, scenes: list, timeline: dict, cfg: dict) -> dict:
     validate_timeline(timeline, len(scenes))
-    expected = [workspace / "presentation" / "daily.pptx", workspace / "audio" / "narration.wav",
+    expected = [workspace / "source.txt", workspace / "scenes.json",
+                workspace / "presentation" / "daily.pptx", workspace / "audio" / "narration.wav",
                 workspace / "audio" / "narration.mp3", workspace / "subtitles" / "zh.srt",
                 workspace / "timeline.json", workspace / "video" / "landscape.mp4"]
     missing = [str(x) for x in expected if not x.is_file() or x.stat().st_size < 10]

@@ -1,0 +1,12 @@
+# Full-length manuscripts: a whole 新闻联播 episode transcript is 6k-8k Chinese
+# characters, which is 60-80 narration scenes at the default 125 chars/scene.
+# Using this config never truncates the source; it only raises the scene ceiling.
+#
+#   news-video plan --input outputs/news/xinwenlianbo-20261114.md --config config/longform.yaml
+#   news-video run  --input outputs/news/xinwenlianbo-20261114.md --config config/longform.yaml \
+#                   --tts espeak --source-url https://cn.govopendata.com/xinwenlianbo/20261114/
+planner:
+  max_scenes: 120
+  min_source_coverage: 0.75
+# The same ceiling applies to the optional LLM planner, which is much slower on a
+# long manuscript; raise the timeout instead of lowering the scene ceiling.
