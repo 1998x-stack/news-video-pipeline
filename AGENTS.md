@@ -17,3 +17,5 @@
 11. 根目录 `skills/` 是九个可迁移技能的真相来源；`agents/` 为五个跨平台角色契约；不得在四种平台适配层私自修改业务规则。
 12. Pi 采用 `.pi/prompts`，不将 `.pi/agents` 误认为原生子代理；Codex 采用 `.agents/skills`；Claude 采用 `.claude/skills`；OpenCode V2 采用 `.opencode/agents`。
 13. 任何改动至少运行 `python scripts/validate_skills.py` 与 `PYTHONPATH=src pytest -q`；技术验收与人工新闻事实/权利/发布验收严格区分。
+14. LLM 网关参数（`planner.timeout_s`/`max_total_s`/`max_tokens`/`reasoning_effort`）必须显式配置并记入 Manifest；LLM 分镜必须通过 `planner.assert_grounded`，一旦检测到原文没有的数字/日期或匹配率不足，整个任务失败。不得为了“让产物通过”而调低 `min_source_coverage` 或跳过守卫。
+15. SKILL.md / Agent 适配器里反引号写的仓库路径必须真实存在（`validate_skills.py` 会解析校验）；不得写入无法执行的占位脚本或指向不存在文件的引用。

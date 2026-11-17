@@ -26,6 +26,8 @@
     python scripts/validate_skills.py
     python scripts/install_agents.py --list
     python scripts/install_agents.py --platform all --dry-run
+    python scripts/check_environment.py --strict
+    python scripts/smoke_test.py --tier static
 
 跨项目安装（将 /path/to/project 替换为真实项目路径）：
 
@@ -79,6 +81,20 @@
 
 其中 release_check.py 总是以退出码 2 表示不可自动发布，即使有人手工把 Manifest 的 public_release_approved 改成 true 也不会解除门禁。P0 尚无身份绑定的人类签核账本；脚本只做人工审批核查提示，不是发布批准执行器。
 
+## Pi 原生发现的实测记录（v0.1.2 本地验证）
+
+本节结论来自真实 Pi 会话，而不是文档推断。
+
+| 项目 | 实测方法 | 结果 |
+|---|---|---|
+| 项目 Skill 自动发现 | 在仓库根目录启动 Pi 会话，检查注入的 skill 清单 | 9 个 Skill 全部被发现，路径为 `.agents/skills/<name>/SKILL.md` |
+| 强制加载 Skill | `pi -p "/skill:news-input-governance 只回复 SKILL_OK"`，再解析 session JSONL | 退出码 0；session 中出现 `<skill name="news-input-governance" location="…/.agents/skills/news-input-governance/SKILL.md">` |
+| Skill 内资源可读 | 检查 session 注入内容与仓库路径 | 注入的是**薄入口**，其中指明先去读仓库根的 `skills/<name>/SKILL.md` 与 `references/` / `assets/` / `scripts/`；这些路径在本仓库真实存在（`validate_skills.py` 现在逐个校验） |
+| Prompt 模板展开 | `pi -p "/news-producer 只回复 TEMPLATE_OK 这 11 个字符"`，再解析 session JSONL | 退出码 0；session 中存有模板全文，且 `$ARGUMENTS` 已被替换为实际参数 |
+| 不把 `.pi/agents/` 当子 Agent | 阅读 `.pi/agents/README.md` 与 Pi 官方说明 | Pi 不会把 `.pi/agents/*.md` 当自动加载的子 Agent；本仓库也未声称已集成子 Agent 执行 |
+
+**重要差异**：Pi 强制加载 Skill 时注入的是 `.agents/skills` 下的薄入口，完整 playbook 需要模型再读一次仓库内的规范文件。这不影响本仓库使用（入口里的路径已由校验器保证存在），但意味着“加载了 Skill”与“读完了 playbook”不是同一事件；如果希望一步到位，可在其他项目直接安装完整 Skill 目录（安装器就是这么做的）。
+
 ## 开发与维护
 
 1. 根目录 skills/ 是业务 Skill 真相来源，修改后维护 reference/asset/script 和相关测试。
@@ -87,5 +103,6 @@
 4. 技术 qa_passed 不包含内容真实、版权许可或公开发布审批。
 5. 先跑 python scripts/validate_skills.py 和 PYTHONPATH=src pytest -q，修改媒体环节再补真实 FFmpeg/TTS E2E。
 6. 不上传 API Keys、用户素材、生成视频音频或模型权重。
+7. SKILL.md 中反引号包住的仓库路径会被 `validate_skills.py` 逐个解析；写了就必须真实存在，否则校验失败（回归测试：`tests/test_agent_assets.py::test_validator_fails_when_a_promised_resource_disappears`）。
 
 详见 docs/agent-integration-review.md、docs/architecture.md、docs/roadmap.md 及根目录 AGENTS.md。
