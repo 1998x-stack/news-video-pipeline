@@ -173,8 +173,18 @@ brew install espeak-ng                            # 1.52.0 + pcaudiolib 1.3
 | `python scripts/smoke_test.py --tier all-offline` | passed 7 / failed 0 / skipped 0（static + offline + synthetic + 真实 espeak） |
 | `news-video validate outputs/*` | 10/10 退出码 0 |
 | `release_check.py` | 退出码 2（不可发布），行为符合预期 |
+| GitHub Actions（`ubuntu-latest`，Python 3.12.16） | 首次运行失败（见下），修正后 **success**：`65 passed`，`check_environment.py --strict` 退出码 0，四层冒烟 `passed 7 / failed 0 / skipped 0`（含 `tts/real_tts_e2e` 真实离线语音） |
 
-`skipped`/`not_run` 的诚实清单：Edge TTS 动态测试、Whisper ASR 复检、Docker 构建、Codex/Claude/OpenCode 动态集成、真机 CI 结果（推送后由 GitHub Actions 给出）。
+### 8.1 CI 失败的真实复现与修复
+
+首次推送的 CI（run `44106390013`）在 45 秒内失败：10 个用例报
+`RuntimeError: pip install '.[llm]' to enable openai-compatible planner`。
+
+- 根因：CI 只安装 `.[test]`，而新增的 planner 测试调用了 `llm_plan()`；该函数顶部的 `import openai` 守卫在注入假客户端**之前**就抛错了。这违反了 AGENTS.md 第 6 条“无需任何在线 API 的测试必须始终能运行”的精神。
+- 修复：把 SDK 导入下移到唯一真正需要它的 `_openai_client()`，并新增用例断言 SDK 缺失时仍抛出可操作的安装提示。
+- 本地复现方式：在仅装 `.[test]` 的空白 venv 中运行 `pytest -q`（当时 10 failed），修复后 65 passed；推送后 CI 变绿。
+
+`skipped`/`not_run` 的诚实清单：Edge TTS 动态测试、Whisper ASR 复检、Docker 构建、Codex/Claude/OpenCode 动态集成。
 
 ## 9. 仍然未完成的能力
 
