@@ -1,0 +1,19 @@
+{
+  "skill": "news-timeline-subtitles",
+  "stage": "统一时间线与字幕",
+  "implemented_scope": "没有词级/字级高亮强制对齐；Whisper 只做可选转写复检",
+  "inputs": "Scene[]、每句 WAV 的 sample count、sample_rate",
+  "outputs": "timeline.json (scene/slide/cue)；subtitles/zh.srt",
+  "manual_review_required": true,
+  "public_release_approved": false,
+  "checkpoints": [
+    "明确唯一时间源为 PCM WAV samples，不允许使用 MP3 长度或推测语速。",
+    "逐句计算 start/end sample，再由 sample_rate 转为毫秒；暂停采样不进入字幕文字显示。",
+    "每段 Scene 从前一段的 end_ms 无缝衔接，scene slide_index 自 1 开始。",
+    "每个 Cue 必须严格为正时长、不重叠、位于所属 Scene 内，并与 SRT 条目数相同。"
+  ],
+  "hard_invariants": [
+    "末尾 Scene end_ms 必须等于 duration_ms；duration_samples / sample_rate 应与真实 WAV 时长一致。",
+    "不同毫秒四舍五入边界要通过测试，不应局部累加已四舍五入的毫秒。"
+  ]
+}

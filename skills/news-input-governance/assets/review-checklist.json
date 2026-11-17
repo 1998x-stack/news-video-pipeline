@@ -1,0 +1,19 @@
+{
+  "skill": "news-input-governance",
+  "stage": "输入与证据",
+  "implemented_scope": "P0 仅支持用户本地输入，不提供自动联网采集、引用验证或版权许可裁定",
+  "inputs": "原稿 UTF-8 TXT/MD/JSON；来源 URL（可选）；人工权利信息（不可自动推定）",
+  "outputs": "标题/字数/输入哈希/警告；未核实事实与权利清单",
+  "manual_review_required": true,
+  "public_release_approved": false,
+  "checkpoints": [
+    "先核对文件扩展名、UTF-8 编码、3 MB 上限以及 JSON body 是否存在；原样保存输入哈希。",
+    "提取可识别标题并记录来源 URL、采集时间、发行主体；未知值必须写 unknown。",
+    "将逐项事实与文字证据分开登记；对政策、日期、数量、引语标记需要人工核验。",
+    "对版权、肖像、授权保留待审状态。技术处理不得产生发布批准。"
+  ],
+  "hard_invariants": [
+    "不得联网假设输入来源权威；也不能补写未提供的新闻事实。",
+    "绝不因为缺少授权证明就默认为已获授权。"
+  ]
+}

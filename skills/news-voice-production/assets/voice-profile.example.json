@@ -1,0 +1,19 @@
+{
+  "skill": "news-voice-production",
+  "stage": "语音制作",
+  "implemented_scope": "当前正式适配 espeak/edge；CosyVoice、Qwen3-TTS 是路线图而非已接入能力",
+  "inputs": "Scene.sentences、voice.provider/rate/name/sample_rate",
+  "outputs": "单句规范化 WAV 缓存、audio/narration.wav 和 narration.mp3",
+  "manual_review_required": true,
+  "public_release_approved": false,
+  "checkpoints": [
+    "为每句独立调用 TTS，规范成 mono、signed 16-bit PCM、配置采样率 WAV。",
+    "以 WAV getnframes 记录每句实际采样数；句间 pause 写入静音采样。",
+    "核查输出非空、格式一致、音量与长静音；音频不合格时中止，不借助估计语速补时长。",
+    "MP3 仅作为发行辅助文件，绝不将其编码时长当作字幕主时钟。"
+  ],
+  "hard_invariants": [
+    "synthetic 模式输出正弦测试音，不是真实配音，必须显著标记不能发布。",
+    "espeak 中文音色是离线测试基线；Edge 与外部 TTS 必须确认使用条款。"
+  ]
+}

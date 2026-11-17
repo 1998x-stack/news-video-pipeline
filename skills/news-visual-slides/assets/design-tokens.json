@@ -1,0 +1,19 @@
+{
+  "skill": "news-visual-slides",
+  "stage": "PPTX / PNG",
+  "implemented_scope": "当前固定 16:9 静态幻灯片，无 9:16 自动布局、动画或语义可视化引擎",
+  "inputs": "Scene[]、标题、render.width/height/font_path、中文字体",
+  "outputs": "presentation/daily.pptx；presentation/slides/slide_NNN.png",
+  "manual_review_required": true,
+  "public_release_approved": false,
+  "checkpoints": [
+    "同一 Scene 驱动 PPTX 原生可编辑文本和 PIL PNG 画面，不能将 PPTX 简化为截图。",
+    "优先检查字形支持、2 行标题/7 行正文限制、页脚遮挡和页码。",
+    "根据 scenes 数量逐一校验 PPTX slide 数与 PNG 数；视频以 PNG 为像素画面源。",
+    "排版修改前后运行端到端回归并记录渲染环境、字体与尺寸。"
+  ],
+  "hard_invariants": [
+    "PPTX 与 PNG 内容应逻辑一致，但不同排版引擎不保证像素级相同。",
+    "超出版面时报错而不是裁剪文字。"
+  ]
+}
