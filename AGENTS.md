@@ -10,3 +10,10 @@
 8. 每次 PR 至少运行 `PYTHONPATH=src pytest -q`，涉及真实 TTS/视频时运行 sample 端到端并检查 `qa_report.json`。更新 README/roadmap 标记实际功能，不夸大尚未实现的模块。
 9. 生产系统需固定 ffmpeg、字体、TTS 模型及代码依赖版本，记录可复现环境信息。当前哈希仅对本软件版本/用户配置有效，不能保证跨机器字节一致。
 10. B站、抖音和 YouTube 上传权限与内容版权分离；必须单独审核授权和发布行为。
+
+
+## 新增：Agents 与 Skills 维护约束
+
+11. 根目录 `skills/` 是九个可迁移技能的真相来源；`agents/` 为五个跨平台角色契约；不得在四种平台适配层私自修改业务规则。
+12. Pi 采用 `.pi/prompts`，不将 `.pi/agents` 误认为原生子代理；Codex 采用 `.agents/skills`；Claude 采用 `.claude/skills`；OpenCode V2 采用 `.opencode/agents`。
+13. 任何改动至少运行 `python scripts/validate_skills.py` 与 `PYTHONPATH=src pytest -q`；技术验收与人工新闻事实/权利/发布验收严格区分。

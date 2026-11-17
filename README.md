@@ -127,3 +127,17 @@ outputs/<input-stem>-<content-config-version-hash>/
 ## 维护原则
 
 尽量保持核心简单：单进程 CLI + 数据模型 + provider 接口 + FFmpeg。新采集器、自动发布、PPT 动画、9:16 编排、政策证据库、GPU TTS 等作为扩展插件进入，不侵入同步内核。
+
+
+## Agents + Skills 跨平台扩展
+
+本项目同时提供 **9 个专业 Skills、5 个 Agent 角色**，包含完整 references、assets 与独立诊断 scripts。支持 Pi、Codex、Claude Code、OpenCode 的各自原生入口，不修改当前新闻视频 CLI 的生产内核。
+
+```bash
+python scripts/validate_skills.py
+python scripts/install_agents.py --list
+python scripts/install_agents.py --platform all --target /path/to/other-project
+python scripts/install_agents.py --platform pi --scope user
+```
+
+项目根目录已有可自动发现的适配入口，无需重复安装；迁移到其他项目或用户级目录使用安装脚本，默认拒绝覆盖已有不同内容的文件。完整用法参见 [多平台使用手册](docs/agent-skills.md) 和 [深度技术评审](docs/agent-integration-review.md)。
