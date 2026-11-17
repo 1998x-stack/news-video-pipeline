@@ -123,8 +123,15 @@ def heuristic_plan(title: str, body: str, max_chars: int, max_scenes: int) -> li
 
 
 def _openai_client(config: dict):
-    """Indirection so tests can substitute a fake OpenAI-compatible client."""
-    from openai import OpenAI
+    """Indirection so tests can substitute a fake OpenAI-compatible client.
+
+    The optional `openai` SDK is imported here, not in `llm_plan`, so the whole
+    offline test suite runs without installing the `llm` extra.
+    """
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise RuntimeError("pip install '.[llm]' to enable openai-compatible planner") from exc
 
     planner = config["planner"]
     return OpenAI(
@@ -192,11 +199,6 @@ def assert_grounded(source: str, scenes: list[Scene], min_coverage: float) -> di
 
 def llm_plan(title: str, body: str, config: dict) -> list[Scene]:
     """Optional LLM copy edit. No invented citations; human verification is still required."""
-    try:
-        import openai  # noqa: F401
-    except ImportError as exc:
-        raise RuntimeError("pip install '.[llm]' to enable openai-compatible planner") from exc
-
     planner = config["planner"]
     model = planner["model"]
     if not model or not os.getenv("OPENAI_API_KEY"):

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -148,6 +149,28 @@ def _full_run(provider: str, scale: float = 0.5) -> dict:
     }
 
 
+def _espeak_executable() -> str | None:
+    return shutil.which("espeak-ng") or shutil.which("espeak")
+
+
+def _require_espeak_voice() -> str:
+    """A usable Chinese voice is an environment capability, not a code claim.
+
+    Missing binary or missing `zh` voice => skipped. A synthesis failure with the
+    voice present still fails the tier.
+    """
+    executable = _espeak_executable()
+    if not executable:
+        raise Skip("espeak-ng/espeak not installed")
+    try:
+        listed = subprocess.run([executable, "--voices=zh"], capture_output=True, text=True, timeout=60)
+    except Exception as exc:  # noqa: BLE001 - any probe failure means "cannot verify here"
+        raise Skip(f"could not query espeak voices: {type(exc).__name__}: {exc}") from exc
+    if listed.returncode != 0 or not listed.stdout.strip():
+        raise Skip("espeak has no Chinese voice list in this environment")
+    return executable
+
+
 def check_synthetic_e2e() -> dict:
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         raise Skip("ffmpeg/ffprobe not installed")
@@ -157,8 +180,7 @@ def check_synthetic_e2e() -> dict:
 def check_real_tts_e2e() -> dict:
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         raise Skip("ffmpeg/ffprobe not installed")
-    if not (shutil.which("espeak-ng") or shutil.which("espeak")):
-        raise Skip("espeak-ng/espeak not installed")
+    _require_espeak_voice()
     return _full_run("espeak")
 
 
@@ -171,8 +193,7 @@ def check_whisper() -> dict:
 
     cfg = _load_config()
     cfg["voice"]["provider"] = "espeak"
-    if not (shutil.which("espeak-ng") or shutil.which("espeak")):
-        raise Skip("espeak-ng/espeak not installed")
+    _require_espeak_voice()
     with tempfile.TemporaryDirectory() as tmp:
         from news_video_pipeline.tts import synthesize
 
@@ -189,14 +210,23 @@ def _llm_manuscript(input_path: Path | None):
     return read_input(path)
 
 
-def check_llm_plan(input_path: Path | None = None) -> dict:
-    import os
+def _skip_without_llm_extra() -> None:
+    import importlib.util
+    import os as _os
 
+    if not importlib.util.find_spec("openai"):
+        raise Skip("openai SDK not installed (pip install '.[llm]')")
+    if not _os.getenv("OPENAI_API_KEY"):
+        raise Skip("OPENAI_API_KEY must be set for the paid LLM tier")
+
+
+def check_llm_plan(input_path: Path | None = None) -> dict:
+    _skip_without_llm_extra()
     cfg = _load_config()
     cfg["planner"]["provider"] = "openai-compatible"
     cfg["planner"]["model"] = os.getenv("OPENAI_MODEL", "")
-    if not cfg["planner"]["model"] or not os.getenv("OPENAI_API_KEY"):
-        raise Skip("OPENAI_API_KEY and OPENAI_MODEL must be set for the paid LLM tier")
+    if not cfg["planner"]["model"]:
+        raise Skip("OPENAI_MODEL must be set for the paid LLM tier")
     from news_video_pipeline.planner import grounding_report, llm_plan
 
     title, body = _llm_manuscript(input_path)
@@ -216,17 +246,15 @@ def check_llm_plan(input_path: Path | None = None) -> dict:
 
 
 def check_llm_e2e(input_path: Path | None = None) -> dict:
-    import os
-
+    _skip_without_llm_extra()
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         raise Skip("ffmpeg/ffprobe not installed")
     cfg = _load_config()
     cfg["planner"]["provider"] = "openai-compatible"
     cfg["planner"]["model"] = os.getenv("OPENAI_MODEL", "")
-    if not cfg["planner"]["model"] or not os.getenv("OPENAI_API_KEY"):
-        raise Skip("OPENAI_API_KEY and OPENAI_MODEL must be set for the paid LLM tier")
-    if not (shutil.which("espeak-ng") or shutil.which("espeak")):
-        raise Skip("espeak-ng/espeak not installed")
+    if not cfg["planner"]["model"]:
+        raise Skip("OPENAI_MODEL must be set for the paid LLM tier")
+    _require_espeak_voice()
     from news_video_pipeline.pipeline import run, validate_existing
 
     cfg["voice"]["provider"] = "espeak"

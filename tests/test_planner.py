@@ -213,6 +213,22 @@ def test_llm_plan_requires_credentials(monkeypatch):
         llm_plan("标题", SOURCE, llm_config())
 
 
+def test_missing_optional_sdk_raises_an_install_hint(monkeypatch):
+    """The offline suite must run with only the `test` extra installed."""
+    import builtins
+
+    real_import = builtins.__import__
+
+    def blocked(name, *args, **kwargs):
+        if name == "openai":
+            raise ImportError("openai is not installed")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked)
+    with pytest.raises(RuntimeError, match=r"pip install '\.\[llm\]'"):
+        planner._openai_client(llm_config())
+
+
 def test_collect_stream_enforces_a_wall_clock_deadline():
     ticks = iter([0.0, 1.0, 999.0])
     with pytest.raises(TimeoutError, match="max_total_s"):
