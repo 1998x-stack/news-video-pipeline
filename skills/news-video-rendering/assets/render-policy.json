@@ -1,0 +1,19 @@
+{
+  "skill": "news-video-rendering",
+  "stage": "视频合成",
+  "implemented_scope": "仅 16:9 静态视频；不含硬字幕、动画、竖屏改排和平台上传",
+  "inputs": "slide_NNN.png、timeline.json、narration.wav、render FPS/尺寸",
+  "outputs": "video/landscape.mp4；ffprobe 轨道信息",
+  "manual_review_required": true,
+  "public_release_approved": false,
+  "checkpoints": [
+    "生成包含精确 Scene 秒数的 ffconcat；末尾重复最后一张图像确保最后画面可显示。",
+    "FFmpeg fps/CFR 编码 x264 + AAC，-t 使用 total samples / sample rate。",
+    "用 ffprobe 验证实际存在 video 和 audio、尺寸符合配置、格式时长差距在阈值内。",
+    "删除正常临时 ffconcat，失败保留诊断信息；不得将视频存在性当作内容审核。"
+  ],
+  "hard_invariants": [
+    "避免把未转义文件路径插入 shell；当前实现已经显式拒绝单引号/换行路径。",
+    "允许输出帧时间量化误差，不能掩盖长时间漂移。"
+  ]
+}

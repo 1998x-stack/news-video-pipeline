@@ -1,0 +1,19 @@
+{
+  "skill": "news-scene-planning",
+  "stage": "场景规划",
+  "implemented_scope": "规则切分并非语义总结，LLM 规划需要人工核查；P1 证据映射 Schema 尚未实现",
+  "inputs": "标题、正文、planner.max_scenes、max_chars_per_scene、可选 LLM 端点",
+  "outputs": "scenes.json: id/title/body/sentences/source_id",
+  "manual_review_required": true,
+  "public_release_approved": false,
+  "checkpoints": [
+    "默认执行 heuristic 规则规划；预览 scenes 数量、每句文本与源文字的可追溯性。",
+    "每个 Scene 的句子必须可直接逐句合成 TTS；避免把一条新闻拆到语义断裂。",
+    "超过 max_scenes 时明确失败并提示修改配置，不得截断。",
+    "LLM 模式仅生成待人工编辑草稿；检查是否新增数字、机构、政策、年份或不受原稿支持的推理。"
+  ],
+  "hard_invariants": [
+    "Scene id 唯一且顺序稳定，sentences 非空；字段升级需同步 schema_version 与测试。",
+    "未验证 LLM 分镜不得视为事实核验完成。"
+  ]
+}

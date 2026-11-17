@@ -1,0 +1,19 @@
+{
+  "skill": "news-quality-gate",
+  "stage": "质量与归档验收",
+  "implemented_scope": "当前 QA 未建立可审计事实证据链、音频响度标准或人工签核系统",
+  "inputs": "output directory、scenes/timeline、manifest、PPTX/PNG/WAV/SRT/MP4",
+  "outputs": "qa_report.json、manifest.json 以及可复验判定",
+  "manual_review_required": true,
+  "public_release_approved": false,
+  "checkpoints": [
+    "先验证所有产物非空、Scene/PPTX/PNG 数一致、字幕条数与 Cue 数一致。",
+    "比对 WAV 样本时长与 Timeline，并使用 ffprobe 检验轨道、画面尺寸和视频时长误差。",
+    "验证 manifest.sha256 全部文件哈希，避免使用损坏缓存。",
+    "将 qa_passed 限定为技术完整性；public_release_approved=false 和 rights_status=unverified 不得自动改写。"
+  ],
+  "hard_invariants": [
+    "输出目录需包含完整 manifest，所有 manifest 路径必须局限于输出目录。",
+    "处理失败应显式非零退出，禁止通过生成空成功标志避开检查。"
+  ]
+}

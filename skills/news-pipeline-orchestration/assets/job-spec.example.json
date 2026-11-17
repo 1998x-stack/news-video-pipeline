@@ -1,0 +1,19 @@
+{
+  "skill": "news-pipeline-orchestration",
+  "stage": "统一编排",
+  "implemented_scope": "不是 DAG 粒度恢复/调度器；定时采集及外部发布还在后续路线图",
+  "inputs": "输入文件、配置文件、目标目录、可选 --force",
+  "outputs": "可重放 output run_id、manifest、qa_report；失败诊断目录",
+  "manual_review_required": true,
+  "public_release_approved": false,
+  "checkpoints": [
+    "先通过 plan 预览场景和输入限制；确保依赖 ffmpeg/ffprobe、Noto 中文字体、TTS 已可用。",
+    "以内容+配置+版本哈希建立 run_id；同一 run id 上锁，成功且哈希有效则复用。",
+    "运行 render PPTX/PNG → per-sentence TTS → timeline/SRT → FFmpeg → QA，然后原子提交目标目录。",
+    "失败时保留 .building-* 诊断目录并中止；不能把未完成目录当作成功产物。"
+  ],
+  "hard_invariants": [
+    "默认无自动采集或发布行为；--force 应明确由操作者指定。",
+    "当前使用 POSIX fcntl，不保证原生 Windows 下直接运行。"
+  ]
+}
