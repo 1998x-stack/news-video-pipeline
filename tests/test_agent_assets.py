@@ -91,3 +91,15 @@ def test_stage_scripts_and_manual_release_gate(tmp_path):
                        capture_output=True, text=True, timeout=10)
     assert r.returncode == 2
     assert "No publishing/authorization performed" in r.stdout
+
+
+def test_forged_approval_flag_does_not_bypass_release_gate(tmp_path):
+    (tmp_path / "manifest.json").write_text(json.dumps({
+        "run_id": "forged", "status": "qa_passed",
+        "rights_status": "verified", "public_release_approved": True
+    }), encoding="utf-8")
+    gate = ROOT / "skills/news-release-review/scripts/release_check.py"
+    r = subprocess.run([sys.executable, str(gate), str(tmp_path)],
+                       capture_output=True, text=True, timeout=10)
+    assert r.returncode == 2
+    assert "No publishing/authorization performed" in r.stdout

@@ -77,7 +77,7 @@
     python skills/news-quality-gate/scripts/audit_manifest.py outputs/<actual-output-directory>
     python skills/news-release-review/scripts/release_check.py outputs/<actual-output-directory>
 
-其中 release_check.py 对当前正常 P0 产物预期以退出码 2 终止，因为 public_release_approved 始终是 false；这表示尚未满足人工发布审核，而不是视频技术失败。
+其中 release_check.py 总是以退出码 2 表示不可自动发布，即使有人手工把 Manifest 的 public_release_approved 改成 true 也不会解除门禁。P0 尚无身份绑定的人类签核账本；脚本只做人工审批核查提示，不是发布批准执行器。
 
 ## 开发与维护
 

@@ -19,7 +19,9 @@ def main(root: Path) -> int:
                       "rights_status": data.get("rights_status", "unknown"),
                       "human_checklist": CHECKS,
                       "note": "No publishing/authorization performed"}, ensure_ascii=False, indent=2))
-    return 2 if data.get("public_release_approved") is not True else 0
+    # P0 has no identity-bound editorial signoff or approval ledger.
+    # A mutable manifest boolean must never count as approval proof.
+    return 2
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
