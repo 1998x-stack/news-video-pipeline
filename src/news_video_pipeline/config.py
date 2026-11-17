@@ -33,6 +33,8 @@ def load_config(path: str | Path | None = None) -> dict:
         raise ValueError("Unsupported planner.provider")
     if int(config["voice"]["sample_rate"]) not in {16000, 22050, 24000, 44100, 48000}:
         raise ValueError("Unsupported sample rate")
+    if config["render"].get("embed_subtitles"):
+        raise NotImplementedError("render.embed_subtitles is planned but not implemented; use external SRT")
     if int(config["render"]["fps"]) <= 0:
         raise ValueError("fps must be positive")
     return config

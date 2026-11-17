@@ -36,11 +36,12 @@ def lock_run(path: Path):
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def identity(input_path: Path, cfg: dict) -> str:
+def identity(input_path: Path, cfg: dict, source_url: str = "") -> str:
     content = input_path.read_bytes()
     digest = hashlib.sha256()
     digest.update(content)
     digest.update(json.dumps(cfg, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    digest.update(source_url.strip().encode("utf-8"))
     digest.update(__version__.encode("ascii"))
     return digest.hexdigest()[:16]
 
@@ -50,7 +51,7 @@ def run(input_path: Path, output_root: Path, cfg: dict, *, force: bool = False, 
     if not input_path.is_file():
         raise FileNotFoundError(input_path)
     title, body = read_input(input_path)
-    run_id = identity(input_path, cfg)
+    run_id = identity(input_path, cfg, source_url)
     output_root = output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     target = output_root / f"{input_path.stem[:55]}-{run_id}"
