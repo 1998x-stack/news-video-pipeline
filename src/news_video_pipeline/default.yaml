@@ -16,6 +16,9 @@ planner:
   max_retries: 1
   reasoning_effort: ''    # e.g. 'none' to suppress runaway reasoning (empty = omit field)
   min_source_coverage: 0.75  # grounding guard: matched source characters / narration characters
+  chunk_chars: 0           # opt in to longform: split source verbatim into LLM calls
+  max_chunks: 16           # cap API call count, fail instead of unexpected spend
+  chunk_min_retention: 0.6 # source-to-output lexical retention plus all numeric tokens
 voice:
   provider: espeak       # espeak | edge | synthetic (TEST ONLY)
   name: zh
@@ -27,6 +30,9 @@ render:
   width: 1280
   height: 720
   fps: 25
+  preset: veryfast       # x264 preset; use ultrafast for explicitly lower-quality previews
+  crf: 22                # higher = smaller/faster but lower visual fidelity
+  timeout_s: 1200        # FFmpeg wall time; raise for longer news programs
   font_path: ''
   embed_subtitles: false
 quality:

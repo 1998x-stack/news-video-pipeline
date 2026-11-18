@@ -1,0 +1,7 @@
+# Faster draft export; lower fps and faster x264 preset trade compression/compatibility for speed.
+# Production/default mode is unchanged. Benchmark and review before publication.
+render:
+  fps: 12
+  preset: ultrafast
+  crf: 26
+  timeout_s: 2400

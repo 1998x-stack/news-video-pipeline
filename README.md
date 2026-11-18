@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/1998x-stack/news-video-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/1998x-stack/news-video-pipeline/actions/workflows/ci.yml)
 
-**状态：v0.1.2 可运行的生产内核（非无人审核发布系统）**。支持输入：新闻联播文字稿、普通新闻稿、长文章，格式为 `.txt`、`.md` 或 JSON `{ "title": "...", "body": "..." }`。
+**状态：v0.1.3 可运行的生产内核（非无人审核发布系统）**。支持输入：新闻联播文字稿、普通新闻稿、长文章，格式为 `.txt`、`.md` 或 JSON `{ "title": "...", "body": "..." }`。
 
 核心原则：**先生成逐句音频，以实际 PCM 采样数生成统一 timeline，所有产物均从同一个场景模型派生。** 不用 Whisper 猜测已知 TTS 句子时间戳。
 
@@ -186,3 +186,17 @@ python scripts/install_agents.py --platform pi --scope user
 ```
 
 项目根目录已有可自动发现的适配入口，无需重复安装；迁移到其他项目或用户级目录使用安装脚本，默认拒绝覆盖已有不同内容的文件。完整用法参见 [多平台使用手册](docs/agent-skills.md) 和 [深度技术评审](docs/agent-integration-review.md)。
+
+
+## P1.1：长稿分块与运行可靠性（v0.1.3）
+
+可选的 `config/llm-longform.yaml` 对较长输入进行逐块 LLM 规划，分别验证 grounding、原文保留率与数字遗漏，再组合分镜；默认不开启分块。分块数量有上限，以防意外产生大量付费请求。POSIX 主线程的流式调用增加实际墙钟保护。
+
+```bash
+news-video plan --input /path/to/long-news.md --config config/llm-longform.yaml
+news-video run --input examples/sample_news.md --config config/fast-preview.yaml
+python scripts/prune_staging.py --out outputs --older-than-hours 24
+python scripts/prune_staging.py --out outputs --older-than-hours 24 --delete
+```
+
+暂存清理默认仅预览，执行删除必须指定 `--delete`；已完成产物与活动任务不会被自动清理。快速预览配置不会改变生产默认值，**没有宣称已测得长视频加速效果**。详见 [P1.1 评审与操作指南](docs/verification/p1-longform-runtime.md)。

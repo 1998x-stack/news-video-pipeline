@@ -79,3 +79,24 @@ def test_reject_unsupported_caption_burnin(tmp_path: Path):
     cfg.write_text("render:\n  embed_subtitles: true\n", encoding="utf-8")
     with pytest.raises(NotImplementedError):
         load_config(cfg)
+
+
+
+def test_cache_rejects_manifest_traversal_instead_of_reusing(tmp_path, monkeypatch):
+    """Old cache fast path must not trust manifest asset paths, even with valid hashes."""
+    import json
+    from news_video_pipeline.quality import file_hash
+    inp = tmp_path / "news.md"
+    inp.write_text("# 标题\n\n第一句话。", encoding="utf-8")
+    cfg = small_config()
+    target = run(inp, tmp_path / "results", cfg)
+    manifest_path = target / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    fake = tmp_path / "fake-audio"
+    fake.write_text("not part of an output")
+    manifest["sha256"] = {"../../fake-audio": file_hash(fake)}
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    # Previous cache skip could accept this forged hash without a path check.
+    result = run(inp, tmp_path / "results", cfg)
+    assert result == target
+    assert "presentation/daily.pptx" in json.loads(manifest_path.read_text())["sha256"]

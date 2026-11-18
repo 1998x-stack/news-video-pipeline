@@ -35,11 +35,11 @@ def render_video(images: list[Path], timeline: dict, audio: Path, destination: P
         "-safe", "0", "-f", "concat", "-i", str(concat),
         "-i", str(audio),
         "-filter_complex", f"[0:v]fps={int(cfg['render']['fps'])},format=yuv420p[v]",
-        "-map", "[v]", "-map", "1:a:0", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
+        "-map", "[v]", "-map", "1:a:0", "-c:v", "libx264", "-preset", str(cfg["render"].get("preset", "veryfast")), "-crf", str(cfg["render"].get("crf", 22)),
         "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-t", f"{duration:.6f}",
         str(destination),
     ]
-    p = subprocess.run(command, text=True, capture_output=True, timeout=1200)
+    p = subprocess.run(command, text=True, capture_output=True, timeout=int(cfg["render"].get("timeout_s", 1200)))
     if p.returncode:
         raise RuntimeError("FFmpeg render failed: " + p.stderr[-3000:])
     concat.unlink(missing_ok=True)

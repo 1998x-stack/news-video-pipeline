@@ -31,6 +31,14 @@ def load_config(path: str | Path | None = None) -> dict:
         raise ValueError("Unsupported voice.provider")
     if config["planner"]["provider"] not in {"heuristic", "openai-compatible"}:
         raise ValueError("Unsupported planner.provider")
+    if int(config["planner"].get("chunk_chars", 0)) < 0 or (
+        0 < int(config["planner"].get("chunk_chars", 0)) < 64
+    ):
+        raise ValueError("planner.chunk_chars must be 0 or at least 64")
+    if int(config["planner"].get("max_chunks", 16)) < 1:
+        raise ValueError("planner.max_chunks must be >= 1")
+    if not 0 < float(config["planner"].get("chunk_min_retention", 0.6)) <= 1:
+        raise ValueError("planner.chunk_min_retention must be in (0, 1]")
     if float(config["planner"]["timeout_s"]) <= 0:
         raise ValueError("planner.timeout_s must be positive")
     if float(config["planner"]["max_total_s"]) <= 0:
@@ -45,6 +53,15 @@ def load_config(path: str | Path | None = None) -> dict:
         raise ValueError("Unsupported sample rate")
     if config["render"].get("embed_subtitles"):
         raise NotImplementedError("render.embed_subtitles is planned but not implemented; use external SRT")
+    if config["render"].get("preset", "veryfast") not in {
+        "ultrafast", "superfast", "veryfast", "faster", "fast",
+        "medium", "slow", "slower", "veryslow",
+    }:
+        raise ValueError("render.preset is not a supported x264 preset")
+    if not 0 <= int(config["render"].get("crf", 22)) <= 51:
+        raise ValueError("render.crf must be within 0..51")
+    if not 30 <= int(config["render"].get("timeout_s", 1200)) <= 14400:
+        raise ValueError("render.timeout_s must be within 30..14400 seconds")
     if int(config["render"]["fps"]) <= 0:
         raise ValueError("fps must be positive")
     return config
