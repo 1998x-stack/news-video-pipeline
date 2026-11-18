@@ -27,7 +27,10 @@
 | 产物完整性校验 | ✅ | `news-video validate` 校验 manifest 中每个文件的 SHA-256、状态与路径安全 |
 | 环境与冒烟报告 | ✅ | `scripts/check_environment.py`、`scripts/smoke_test.py` 输出可复现的 JSON 证据（密钥只报告 set/unset） |
 | Whisper ASR 复检 | ✅ 可选 | `faster-whisper`，需要模型下载和算力 |
-| 多源事实验证、版权许可自动判断 | ❌ | 必须人工核验；后续阶段实现证据管理 |
+| AI 主编选题（curated-analysis） | ✅ 新增 | 从整期节目中抽取全部候选新闻（`news_items.json`）、七维度加权排名、两阶段筛选出 3–5 条并记录每条落选理由；未入选新闻不会进入成片 |
+| 独立深度解读 | ✅ 新增 | 每条入选新闻生成分析简报，事实/推论/观点/未知分开，附带机制、二阶影响、反例与观察指标（`analysis_briefs.json`、`claims.json`） |
+| 时长预算与内容批评 | ✅ 新增 | 由实测语速换算口播字数预算，超限退回有限次修订后失败，不靠截断满足时长 |
+| 多源事实验证、版权许可自动判断 | ❌ | 必须人工核验；后续阶段实现证据管理（当前只有字面/数字级守卫，语义蕴含仍需人工） |
 | 9:16 重排、字幕硬烧、自动上传 | ❌ | 留待 P1/P2；不存在自动发布行为 |
 
 ## 环境要求
@@ -130,6 +133,21 @@ outputs/<input-stem>-<content-config-version-hash>/
 ├── subtitles/zh.srt
 └── video/landscape.mp4
 ```
+
+使用 `--editorial curated-analysis` 时，同一目录额外包含（均进入 manifest 哈希链）：
+
+```text
+├── news_items.json            # 全部候选新闻 + 抽取报告（含未处理行的记录）
+├── editorial_ranking.json     # 七维度分数、逐维度理由、加权总分、主题、标记
+├── editorial_selection.json   # 入选 5 条 + 每条落选理由与选择配置
+├── analysis_briefs.json       # 每条入选新闻的机制/二阶影响/反例/观察指标
+├── claims.json                # FACT / INFERENCE / OPINION / UNKNOWN 计数与明细
+├── editorial_script.md        # 经审查的口播稿（分镜由它派生）
+├── editorial_report.json      # 抽取报告、批评结果、grounding 结论、LLM 成本与修复记录
+└── FAILED.txt                 # 仅失败时：失败暂存目录，永不发布
+```
+
+CLI：`news-video editorial extract|rank|select|script` 可单独执行任一阶段并复用上一阶段产物（`--refresh` 强制重跑）；`run`/`plan` 支持 `--editorial` 与 `--top-k`。
 
 `timeline.json` 中每个 scene 有 `slide_index/start_ms/end_ms`，每句字幕有 `scene_id/start_ms/end_ms`。时长来自逐句 WAV 帧数；`qa_report.json` 检查字幕数、连续性、PPT 存在性、音频实际长度和 MP4 轨道/时长。`manifest.json` 保存生成版本、输入哈希、配置和输出文件哈希，`public_release_approved` 恒为 `false`。
 

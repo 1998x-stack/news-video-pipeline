@@ -93,12 +93,26 @@ def check_length(script: EditorialScript, cfg: dict) -> dict:
     }
 
 
+def section_allocation(cfg: dict, story_count: int) -> dict:
+    """A concrete per-section character split; a global ceiling alone gets ignored."""
+    budget = narration_budget(cfg)
+    opening, closing = 60, 150
+    remaining = max(story_count * 150, budget["max_chars"] - opening - closing)
+    return {
+        "opening_hook_chars": opening,
+        "closing_synthesis_chars": closing,
+        "per_story_chars": int(remaining / max(1, story_count)),
+        "total_max_chars": budget["max_chars"],
+    }
+
+
 def script_payload(briefs: list[AnalysisBrief], selection: EditorialSelection, cfg: dict) -> dict:
     """What the script writer sees: validated briefs, not the raw programme."""
     return {
         "top_k": selection.top_k,
         "target_duration_ms": list(cfg["editorial"]["target_duration_ms"]),
         "narration_char_budget": narration_budget(cfg),
+        "section_allocation": section_allocation(cfg, len(briefs)),
         "selected": list(selection.selected),
         "stories": [
             {
