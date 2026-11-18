@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
+import threading
 import time
+from contextlib import contextmanager
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -197,7 +200,87 @@ def assert_grounded(source: str, scenes: list[Scene], min_coverage: float) -> di
     return report
 
 
-def llm_plan(title: str, body: str, config: dict) -> list[Scene]:
+
+@contextmanager
+def hard_deadline(seconds: float):
+    """Bound synchronous OpenAI calls including blocked socket reads on POSIX CLI.
+
+    SIGALRM can only be used in a main thread. A pre-existing timer is not
+    overwritten. On unsupported runtimes fail closed rather than claiming that
+    a per-chunk monotonic check enforces a true end-to-end deadline.
+    """
+    if not hasattr(signal, "setitimer") or threading.current_thread() is not threading.main_thread():
+        raise RuntimeError("LLM hard deadline requires a POSIX main thread; run the CLI in a main thread")
+    if signal.getitimer(signal.ITIMER_REAL)[0] > 0:
+        raise RuntimeError("An existing SIGALRM timer is active; refusing to replace it")
+
+    old_handler = signal.getsignal(signal.SIGALRM)
+
+    def expired(signum, frame):
+        raise TimeoutError(
+            f"LLM call exceeded planner.max_total_s={seconds:g}s (including blocked network reads)"
+        )
+
+    signal.signal(signal.SIGALRM, expired)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+
+def split_source_chunks(body: str, limit: int) -> list[str]:
+    """Split long source verbatim; prefer punctuation and preserve every character.
+
+    Unlike a summarizer this routine never drops headings, delimiters or spaces.
+    Splitting an unusually long punctuation-free section is explicitly allowed.
+    """
+    if limit < 64:
+        raise ValueError("planner.chunk_chars must be >= 64, or 0 to disable chunking")
+    chunks: list[str] = []
+    start = 0
+    while start < len(body):
+        stop = min(len(body), start + limit)
+        if stop < len(body):
+            # Prefer a natural boundary beyond half the chunk capacity.
+            candidates = [start + m.end() for m in re.finditer(
+                r"[。！？!?；;\n]", body[start:stop]
+            ) if m.end() >= limit // 2]
+            if candidates:
+                stop = candidates[-1]
+        chunks.append(body[start:stop])
+        start = stop
+    assert "".join(chunks) == body
+    return chunks
+
+
+def assert_source_retained(source: str, scenes: list[Scene], minimum: float) -> dict:
+    """Catch omitted input, not only invented output, for opt-in longform mode.
+
+    This is a lexical gate only: semantic entailment and copyright need humans.
+    """
+    output = "".join(sentence for scene in scenes for sentence in scene.sentences)
+    source_norm, output_norm = normalize_text(source), normalize_text(output)
+    matcher = SequenceMatcher(None, source_norm, output_norm, autojunk=False)
+    matching = sum(block.size for block in matcher.get_matching_blocks())
+    retention = matching / max(1, len(source_norm))
+    source_numbers = set(NUMERIC.findall(source))
+    dropped_numbers = sorted(source_numbers - set(NUMERIC.findall(output)))
+    if dropped_numbers:
+        raise ValueError(
+            f"LLM omitted source numeric tokens: {dropped_numbers}; "
+            "refusing a silently shortened longform section"
+        )
+    if retention < minimum:
+        raise ValueError(
+            f"LLM source retention {retention:.2f} below planner.chunk_min_retention={minimum}; "
+            "refusing a silently shortened longform section"
+        )
+    return {"source_retention": retention, "omitted_numeric_tokens": dropped_numbers}
+
+
+def _llm_plan_one(title: str, body: str, config: dict) -> list[Scene]:
     """Optional LLM copy edit. No invented citations; human verification is still required."""
     planner = config["planner"]
     model = planner["model"]
@@ -223,10 +306,15 @@ def llm_plan(title: str, body: str, config: dict) -> list[Scene]:
     effort = str(planner.get("reasoning_effort") or "").strip()
     if effort:
         request["reasoning_effort"] = effort
-    answer = collect_stream(
-        _openai_client(config).chat.completions.create(**request),
-        max_total_s=float(planner["max_total_s"]),
-    )
+    # Guard the initial HTTP response AND each streaming read. A socket-level
+    # timeout only limits individual reads, not total time spent in a gateway.
+    with hard_deadline(float(planner["max_total_s"])):
+        stream = _openai_client(config).chat.completions.create(**request)
+        try:
+            answer = collect_stream(stream, max_total_s=float(planner["max_total_s"]))
+        finally:
+            if callable(getattr(stream, "close", None)):
+                stream.close()
     if not answer.strip():
         raise ValueError(
             "LLM returned no content; a thinking model may have spent the whole "
@@ -262,6 +350,44 @@ def llm_plan(title: str, body: str, config: dict) -> list[Scene]:
         )
     assert_grounded(body, normalized, float(planner["min_source_coverage"]))
     return normalized
+
+
+def llm_plan(title: str, body: str, config: dict) -> list[Scene]:
+    """Use bounded, independently grounded LLM calls on opt-in long manuscripts.
+
+    Default (chunk_chars=0) preserves the v0.1.2 single-request behavior.
+    """
+    options = config["planner"]
+    limit = int(options.get("chunk_chars", 0))
+    if not limit or len(body) <= limit:
+        return _llm_plan_one(title, body, config)
+    chunks = split_source_chunks(body, limit)
+    max_chunks = int(options.get("max_chunks", 16))
+    if len(chunks) > max_chunks:
+        raise ValueError(
+            f"Manuscript requires {len(chunks)} LLM requests; "
+            f"planner.max_chunks={max_chunks}; increase with explicit API budget approval"
+        )
+    combined: list[Scene] = []
+    for chunk_index, part in enumerate(chunks, 1):
+        local = _llm_plan_one(f"{title} - part {chunk_index}", part, config)
+        assert_source_retained(part, local, float(options.get("chunk_min_retention", 0.6)))
+        for scene in local:
+            combined.append(Scene(
+                id=f"scene_{len(combined) + 1:03d}",
+                title=scene.title,
+                body=scene.body,
+                sentences=scene.sentences,
+                source_id=scene.source_id,
+            ))
+        if len(combined) > int(options["max_scenes"]):
+            raise ValueError(
+                f"Chunked LLM narration needs more than planner.max_scenes={options['max_scenes']}; "
+                "raise the scene limit without truncating"
+            )
+    assert_grounded(body, combined, float(options["min_source_coverage"]))
+    assert_source_retained(body, combined, float(options.get("chunk_min_retention", 0.6)))
+    return combined
 
 
 def plan(title: str, body: str, cfg: dict) -> list[Scene]:

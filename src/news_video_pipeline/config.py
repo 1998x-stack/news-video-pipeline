@@ -31,6 +31,14 @@ def load_config(path: str | Path | None = None) -> dict:
         raise ValueError("Unsupported voice.provider")
     if config["planner"]["provider"] not in {"heuristic", "openai-compatible"}:
         raise ValueError("Unsupported planner.provider")
+    if int(config["planner"].get("chunk_chars", 0)) < 0 or (
+        0 < int(config["planner"].get("chunk_chars", 0)) < 64
+    ):
+        raise ValueError("planner.chunk_chars must be 0 or at least 64")
+    if int(config["planner"].get("max_chunks", 16)) < 1:
+        raise ValueError("planner.max_chunks must be >= 1")
+    if not 0 < float(config["planner"].get("chunk_min_retention", 0.6)) <= 1:
+        raise ValueError("planner.chunk_min_retention must be in (0, 1]")
     if float(config["planner"]["timeout_s"]) <= 0:
         raise ValueError("planner.timeout_s must be positive")
     if float(config["planner"]["max_total_s"]) <= 0:

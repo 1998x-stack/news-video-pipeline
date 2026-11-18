@@ -1,0 +1,13 @@
+# Opt-in, bounded multi-call LLM planning for long manuscripts.
+# Each source chunk is preserved verbatim. Every model result is independently
+# checked, then combined and checked again. Missing original numbers fail closed.
+# Requests may incur costs. Set OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL.
+planner:
+  provider: openai-compatible
+  max_scenes: 120
+  chunk_chars: 1200
+  max_chunks: 12
+  chunk_min_retention: 0.6
+  reasoning_effort: none
+  max_total_s: 900
+  max_tokens: 8192
