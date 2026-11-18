@@ -41,3 +41,34 @@ quality:
   whisper_model: small
   whisper_device: cpu
   min_transcript_similarity: 0.60
+editorial:
+  mode: none              # none (whole manuscript) | curated-analysis (AI news chief editor)
+  top_k: 5                # target number of selected stories (3-5 by product intent)
+  min_candidates: 3       # below this the run reports insufficiency instead of padding
+  shortlist: 9            # candidates taken into the second, comparative ranking pass
+  min_total_score: 55     # weighted score (0-100) required to be selectable
+  min_confidence: 0.5     # planner confidence required to be selectable
+  max_topic_share: 0.6    # soft diversity ceiling for one topic among the selection
+  batch_size: 8           # candidates per scoring call (bounds cost and latency)
+  fact_anchor_min: 0.6    # normalised overlap a FACT claim needs with its cited span
+  max_revisions: 2        # bounded critic-driven script revisions
+  target_duration_ms: [360000, 900000]   # 6-10 minutes, advisory not enforced by truncation
+  aggregate_headings:     # programme sections that glue several stories into one block
+    - 国内联播快讯
+    - 国际联播快讯
+  weights:                # configurable initial hypothesis, not user-validated
+    public_impact: 25
+    structural_importance: 20
+    information_novelty: 15
+    analytical_depth: 15
+    timeliness: 10
+    evidence_quality: 10
+    audience_utility: 5
+  critique_min:
+    factual_grounding: 7
+    analytical_depth: 6
+    original_insight: 5
+    clarity: 7
+    audience_utility: 6
+    uncertainty_handling: 7
+    narrative_coherence: 7

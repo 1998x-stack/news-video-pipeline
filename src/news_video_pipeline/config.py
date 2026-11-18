@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from .editorial.models import CRITIQUE_DIMENSIONS, DIMENSIONS
+
 DEFAULT_CONFIG = Path(__file__).with_name("default.yaml")
 
 
@@ -64,4 +66,52 @@ def load_config(path: str | Path | None = None) -> dict:
         raise ValueError("render.timeout_s must be within 30..14400 seconds")
     if int(config["render"]["fps"]) <= 0:
         raise ValueError("fps must be positive")
+    validate_editorial(config["editorial"])
     return config
+
+
+def validate_editorial(editorial: dict) -> dict:
+    """Fail closed on an editorial config that could silently change selection."""
+    mode = editorial.get("mode", "none")
+    if mode not in {"none", "curated-analysis"}:
+        raise ValueError(f"Unsupported editorial.mode: {mode!r}")
+    weights = editorial.get("weights")
+    if not isinstance(weights, dict) or set(weights) != set(DIMENSIONS):
+        unknown = sorted(set(weights or {}) - set(DIMENSIONS))
+        if unknown:
+            raise ValueError(f"editorial.weights has unknown dimension(s): {unknown}")
+        raise ValueError(f"editorial.weights must define exactly {list(DIMENSIONS)}")
+    if any(not isinstance(v, int) or v < 0 for v in weights.values()):
+        raise ValueError("editorial.weights values must be non-negative integers")
+    if sum(weights.values()) != 100:
+        raise ValueError(f"editorial.weights must sum to 100, got {sum(weights.values())}")
+    rubric = editorial.get("critique_min")
+    if not isinstance(rubric, dict) or set(rubric) != set(CRITIQUE_DIMENSIONS):
+        raise ValueError(f"editorial.critique_min must define exactly {list(CRITIQUE_DIMENSIONS)}")
+    if any(not isinstance(v, int) or not 0 <= v <= 10 for v in rubric.values()):
+        raise ValueError("editorial.critique_min thresholds must be integers within 0..10")
+    top_k, minimum = int(editorial["top_k"]), int(editorial["min_candidates"])
+    if minimum < 1 or top_k < minimum:
+        raise ValueError(f"editorial.top_k ({top_k}) must be >= editorial.min_candidates ({minimum}) >= 1")
+    if int(editorial["shortlist"]) < top_k:
+        raise ValueError(f"editorial.shortlist ({editorial['shortlist']}) must be >= editorial.top_k ({top_k})")
+    if not 0 < float(editorial["min_confidence"]) <= 1:
+        raise ValueError("editorial.min_confidence must be in (0, 1]")
+    if not 0 < float(editorial["max_topic_share"]) <= 1:
+        raise ValueError("editorial.max_topic_share must be in (0, 1]")
+    if not 0 <= float(editorial["min_total_score"]) <= 100:
+        raise ValueError("editorial.min_total_score must be within 0..100")
+    if int(editorial["batch_size"]) < 1:
+        raise ValueError("editorial.batch_size must be >= 1")
+    if int(editorial["max_revisions"]) < 0:
+        raise ValueError("editorial.max_revisions must not be negative")
+    if not 0 < float(editorial["fact_anchor_min"]) <= 1:
+        raise ValueError("editorial.fact_anchor_min must be in (0, 1]")
+    headings = editorial.get("aggregate_headings")
+    if not isinstance(headings, list) or not headings or any(not isinstance(x, str) or not x.strip() for x in headings):
+        raise ValueError("editorial.aggregate_headings must be a non-empty list of strings")
+    window = editorial.get("target_duration_ms")
+    if (not isinstance(window, list) or len(window) != 2
+            or not all(isinstance(x, int) for x in window) or window[0] >= window[1] or window[0] <= 0):
+        raise ValueError("editorial.target_duration_ms must be [min_ms, max_ms] with 0 < min < max")
+    return editorial
