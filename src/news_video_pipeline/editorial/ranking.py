@@ -150,6 +150,8 @@ def ranked_table(ratings: list[StoryRating], candidates: list[StoryCandidate] | 
         table.append({
             "rank": position,
             "story_id": rating.story_id,
+            # Canonical, round-trippable record; the columns below are for reading.
+            "rating": rating.to_dict(),
             "headline": headlines.get(rating.story_id, ""),
             "section": sections.get(rating.story_id, ""),
             "topic": rating.topic,

@@ -34,7 +34,43 @@ def transcript_similarity(audio: Path, expected: str, cfg: dict) -> float:
     return difflib.SequenceMatcher(None, normalize(expected), normalize(actual)).ratio()
 
 
-def validate_outputs(workspace: Path, scenes: list, timeline: dict, cfg: dict) -> dict:
+def validate_editorial_artifacts(workspace: Path, scenes: list, cfg: dict) -> dict:
+    """Check the curated-mode trail, including that no dropped story reached the video."""
+    from .pipeline import EDITORIAL_ARTIFACTS
+
+    missing = [name for name in EDITORIAL_ARTIFACTS if not (workspace / name).is_file()]
+    if missing:
+        raise ValueError(f"Curated mode is missing editorial artifact(s): {missing}")
+    selection = json.loads((workspace / "editorial_selection.json").read_text(encoding="utf-8"))
+    selected = list(selection.get("selected") or [])
+    if not selected:
+        raise ValueError("editorial_selection.json records no selected story")
+    if len(selected) > int(selection.get("top_k", 0)):
+        raise ValueError("editorial_selection.json selects more stories than top_k")
+    claims = json.loads((workspace / "claims.json").read_text(encoding="utf-8"))
+    briefs = json.loads((workspace / "analysis_briefs.json").read_text(encoding="utf-8"))
+    if {brief["story_id"] for brief in briefs["briefs"]} != set(selected):
+        raise ValueError("analysis_briefs.json does not cover exactly the selected stories")
+    if int(claims.get("counts", {}).get("FACT", 0)) < 1:
+        raise ValueError("claims.json records no FACT claim; the analysis is unsourced")
+    # The scenes must narrate only the selected stories plus the hook and the close.
+    allowed = set(selected) | {"opening", "closing"}
+    strays = sorted({scene.source_id for scene in scenes if getattr(scene, "source_id", "") not in allowed})
+    if strays:
+        raise ValueError(f"Scenes narrate story id(s) {strays} that were not selected")
+    script = (workspace / "editorial_script.md").read_text(encoding="utf-8")
+    if len(script.strip()) < 200:
+        raise ValueError("editorial_script.md is too short to be a 6-10 minute narration")
+    return {
+        "selected": selected,
+        "insufficient": bool(selection.get("insufficient")),
+        "claims": claims.get("counts"),
+        "scenes_from_selection": len([scene for scene in scenes if getattr(scene, "source_id", "") in set(selected)]),
+    }
+
+
+def validate_outputs(workspace: Path, scenes: list, timeline: dict, cfg: dict,
+                     editorial_artifacts: bool = False) -> dict:
     validate_timeline(timeline, len(scenes))
     expected = [workspace / "source.txt", workspace / "scenes.json",
                 workspace / "presentation" / "daily.pptx", workspace / "audio" / "narration.wav",
@@ -72,6 +108,8 @@ def validate_outputs(workspace: Path, scenes: list, timeline: dict, cfg: dict) -
             raise ValueError(f"Whisper QA mismatch: {score:.3f}")
     else:
         score = None
+    editorial = validate_editorial_artifacts(workspace, scenes, cfg) if editorial_artifacts else None
     return {"status": "passed", "scenes": len(scenes), "cues": count, "audio_duration_ms": round(duration),
             "video_duration_ms": round(rendered_ms), "duration_delta_ms": round(drift), "whisper_similarity": score,
+            "editorial": editorial,
             "note": "Human editorial/source/rights review remains required before publication."}
