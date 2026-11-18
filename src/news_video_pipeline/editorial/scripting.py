@@ -88,7 +88,7 @@ def check_length(script: EditorialScript, cfg: dict) -> dict:
         "under": chars < budget["min_chars"],
         "note": (
             "Length is measured in spoken characters and never fixed by truncation; "
-            "an out-of-budget script is sent back for a bounded revision and then fails."
+            "an over-target script is offered bounded revisions; only strict policy blocks it."
         ),
     }
 

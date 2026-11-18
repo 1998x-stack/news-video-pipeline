@@ -184,12 +184,20 @@ def run(input_path: Path, output_root: Path, cfg: dict, *, force: bool = False, 
             write_srt(timeline, stage / "subtitles" / "zh.srt")
             if cfg["editorial"]["mode"] == "curated-analysis":
                 # Check actual PCM-derived duration before expensive FFmpeg work.
-                assert_curated_duration(timeline["duration_samples"] * 1000 / timeline["sample_rate"], cfg)
+                duration_advice = assert_curated_duration(
+                    timeline["duration_samples"] * 1000 / timeline["sample_rate"], cfg
+                )
+                if not duration_advice["target_met"]:
+                    print(f"[editorial] 时长提示：{duration_advice['duration_ms']} ms；"
+                          f"偏离目标 {duration_advice['deviation_ms']} ms，"
+                          "已保留完整内容供人工编辑复核", flush=True)
             print(f"[3/5] TTS + SRT: {timeline['duration_ms']} ms", flush=True)
             render_video(images, timeline, stage / "audio" / "narration.wav", stage / "video" / "landscape.mp4", cfg)
             print("[4/5] rendered MP4", flush=True)
             qa = validate_outputs(stage, scenes, timeline, cfg,
                                   editorial_artifacts=cfg["editorial"]["mode"] == "curated-analysis")
+            if curated:
+                curated["duration"] = qa["editorial"]["duration"]
             atomic_json(stage / "qa_report.json", qa)
             print("[5/5] QA passed", flush=True)
             assets = {str(path.relative_to(stage)): file_hash(path) for path in stage.rglob("*") if path.is_file() and path.name != "manifest.json"}

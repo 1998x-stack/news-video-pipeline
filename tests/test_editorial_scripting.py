@@ -241,6 +241,7 @@ def test_check_length_flags_an_over_long_script(cfg, briefs, selection):
 def test_critique_gate_refuses_an_over_long_script(cfg, briefs, selection):
     script = make_script(cfg, briefs, selection)
     cfg["editorial"]["speech_chars_per_second"] = 0.01
+    cfg["editorial"]["duration_policy"] = "strict"
     report = critique_module.critique(script, briefs, cfg, FakeLLM(
         {"critique": [{"scores": scores(9), "problems": []}]}))
     assert report["length"]["over"] is True
@@ -297,6 +298,7 @@ def test_build_script_with_critique_returns_on_a_passing_review(cfg, briefs, sel
 def test_an_over_long_script_is_sent_back_for_revision(cfg, briefs, selection):
     cfg["editorial"]["max_revisions"] = 1
     cfg["editorial"]["speech_chars_per_second"] = 0.05
+    cfg["editorial"]["duration_policy"] = "strict"
     candidates = [candidate("story_001", "经济数据发布", SOURCE_A, 1, "c1"),
                   candidate("story_002", "出口数据发布", SOURCE_B, 2, "c2")]
     llm = FakeLLM({
@@ -370,3 +372,20 @@ def test_budget_no_longer_allows_fifteen_percent_overrun(cfg):
     cfg["editorial"]["length_tolerance"] = 1.15
     budget = scripting.narration_budget(cfg)
     assert budget["hard_max_chars"] == budget["max_chars"]
+
+
+def test_default_warn_can_keep_over_target_script_after_bounded_revisions(cfg, briefs, selection):
+    cfg["editorial"]["max_revisions"] = 1
+    cfg["editorial"]["speech_chars_per_second"] = 0.05
+    assert cfg["editorial"]["duration_policy"] == "warn"
+    candidates = [candidate("story_001", "经济数据发布", SOURCE_A, 1, "c1"),
+                  candidate("story_002", "出口数据发布", SOURCE_B, 2, "c2")]
+    llm = FakeLLM({"script": [script_answer(), script_answer()],
+                   "critique": [{"scores": scores(9), "problems": []},
+                                {"scores": scores(9), "problems": []}]})
+    result, report = critique_module.build_script_with_critique(
+        briefs, selection, cfg, llm, candidates)
+    assert result.body
+    assert report["length"]["over"] is True
+    assert report["failed"] == []
+    assert llm.count("script") == 2, "The editor should attempt a bounded improvement first"
