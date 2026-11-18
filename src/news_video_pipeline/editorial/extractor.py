@@ -32,6 +32,8 @@ HEADING_MAX = 100
 CLUSTER_SIMILARITY = 0.72
 SUBSTRING_MIN = 10
 COMMON_PHRASE_MIN = 12
+# A brief repeats its headline just after it, possibly behind a connective.
+MIN_REPEAT_PREFIX = 10
 
 
 @dataclass(frozen=True)
@@ -235,14 +237,15 @@ def _block_body(block: Block) -> tuple[str, int]:
 def derived_headline(text: str, limit: int = 40) -> str:
     """Recover a brief's own headline from a glued `headline + body` string.
 
-    Brief items repeat their headline at the start of their body (sometimes after
-    a connective such as 近日，), which is exactly how the boundary can be shown.
+    A brief repeats its headline at the start of its own body, sometimes after a
+    short connective (近日，/今天/记者从…获悉，), so the longest prefix that occurs
+    again later in the item is the headline. When nothing repeats, fall back to the
+    first clause, which is honest about the uncertainty rather than inventing one.
     """
     head = text[:limit]
-    for size in range(len(head), 7, -1):
-        prefix = text[:size]
-        if text.find(prefix, size, size + 6) != -1:
-            return prefix
+    for size in range(len(head), MIN_REPEAT_PREFIX - 1, -1):
+        if text.find(text[:size], size) != -1:
+            return text[:size]
     marker = re.search(r"(近日|今天|昨天|日前|\d+月\d+日|[，；])", text)
     if marker and 6 <= marker.start() <= limit:
         return text[:marker.start()]
@@ -252,9 +255,11 @@ def derived_headline(text: str, limit: int = 40) -> str:
 def split_aggregate(block: Block, cfg: dict, llm, diagnostics: list | None = None) -> list[Block]:
     """Split one aggregate 联播快讯 block into its items, or keep it whole.
 
-    The model proposes the item texts; ``verify_verbatim`` proves they rebuild
-    the container byte-for-byte. Any failure keeps the container as one candidate
-    marked ``uncertain`` so a human can split it, and never drops content.
+    The model proposes each item's text (and optionally its headline);
+    ``verify_verbatim`` proves the texts rebuild the container byte-for-byte, and a
+    proposed headline is accepted only when it also occurs verbatim in that item.
+    Any failure keeps the container as one candidate marked ``uncertain`` so a human
+    can split it, and never drops content.
     """
     if not block.is_aggregate:
         return [block]
@@ -271,7 +276,16 @@ def split_aggregate(block: Block, cfg: dict, llm, diagnostics: list | None = Non
             raise ValueError(failure)
         if len(items) > int(cfg["editorial"].get("max_split_items", 12)):
             raise ValueError("aggregate split returned more items than editorial.max_split_items")
-        spans = verify_verbatim(body_text, [str(x) for x in items])
+        texts: list[str] = []
+        proposed: list[str] = []
+        for entry in items:
+            if isinstance(entry, dict):
+                texts.append(str(entry.get("text") or ""))
+                proposed.append(str(entry.get("headline") or "").strip())
+            else:
+                texts.append(str(entry))
+                proposed.append("")
+        spans = verify_verbatim(body_text, texts)
     except Exception as error:  # noqa: BLE001 - any failure keeps the source intact
         if diagnostics is not None:
             diagnostics.append({
@@ -281,10 +295,14 @@ def split_aggregate(block: Block, cfg: dict, llm, diagnostics: list | None = Non
             })
         return [replace(block, split_status="uncertain")]
     pieces: list[Block] = []
-    for index, (start, end) in enumerate(spans, 1):
+    for index, (start, end) in enumerate(spans):
         text = body_text[start:end]
+        headline = proposed[index]
+        # A headline is only trusted when it is itself verbatim in the item.
+        if not headline or headline not in text:
+            headline = derived_headline(text)
         pieces.append(Block(
-            heading=derived_headline(text),
+            heading=headline,
             text=text,
             start=offset + start,
             end=offset + end,

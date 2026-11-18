@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from news_video_pipeline.config import load_config
-from news_video_pipeline.editorial.llm import EditorialLLM, json_object, require_keys
+from news_video_pipeline.editorial.llm import EditorialLLM, json_object, parse_object, require_keys
 
 
 def chunk(content, usage=None):
@@ -47,6 +47,36 @@ def test_json_object_accepts_plain_and_fenced_answers():
         json_object("抱歉，我无法回答。")
     with pytest.raises(ValueError, match="expected a JSON object"):
         json_object("[1, 2]")
+
+
+def test_inner_ascii_quotes_inside_a_chinese_value_are_repaired():
+    """Observed from the real gateway: “” rewritten as an ASCII quote breaks the JSON."""
+    obj, repairs = parse_object('{"reasons":{"a":"文中提到"稳定器"与"主引擎"，影响范围广。"}}')
+    assert obj["reasons"]["a"] == '文中提到"稳定器"与"主引擎"，影响范围广。'
+    assert repairs == ["escaped_inner_quotes:4"]
+
+
+def test_a_trailing_comma_is_repaired_and_reported():
+    obj, repairs = parse_object('{"ratings": [],}')
+    assert obj == {"ratings": []}
+    assert repairs == ["trailing_comma"]
+
+
+def test_a_truncated_answer_is_not_invented_into_a_result():
+    with pytest.raises(ValueError, match="did not return valid JSON"):
+        parse_object('{"ratings":[{"story_id":"story_001"')
+    with pytest.raises(ValueError, match="did not return valid JSON"):
+        parse_object('{"a":"未闭合')
+
+
+def test_a_repair_is_recorded_instead_of_being_silent(cfg):
+    """A silent repair would hide a real gateway defect, so repairs are logged."""
+    calls: list = []
+    model = fake(cfg, '{"items":["他说"好"的",],}', calls)
+    result = model("aggregate_split", {"text": "x"})
+    assert result["items"] == ['他说"好"的']
+    assert model.repairs == [{"stage": "aggregate_split", "repairs": ["trailing_comma", "escaped_inner_quotes:2"]}]
+    assert model.summary()["repairs"]
 
 
 def test_require_keys_names_the_stage_and_the_missing_key():
@@ -112,6 +142,52 @@ def test_identical_payload_is_served_from_cache(cfg, tmp_path):
     assert model.call_count == 1
     assert [entry["cache_hit"] for entry in model.stage_log] == [False, True]
     assert model.summary()["cache_hits"] == 1
+
+
+def test_a_cached_answer_that_fails_its_check_is_discarded(cfg, tmp_path):
+    """A bad answer must not become a permanent failure just because it was cached."""
+    cache = tmp_path / "cache"
+    calls: list = []
+    bad = fake(cfg, '{"ratings": []}', calls, cache_dir=cache)
+
+    def check(answer):
+        raise ValueError("missing dimension(s) ['analytical_depth']")
+
+    with pytest.raises(ValueError, match="failed after 1 attempt"):
+        bad("rank", {"text": "same"}, check=check)
+    assert calls, "the first call must have happened"
+    cached_files = list(cache.glob("*.json"))
+    assert cached_files == [], "an answer that fails validation must not stay cached"
+
+
+def test_a_check_failure_is_retried_with_the_error_appended(cfg):
+    cfg["planner"]["max_retries"] = 1
+    calls: list = []
+    seen: list[dict] = []
+
+    def create(**request):
+        calls.append(request)
+        seen.append(json.loads(request["messages"][-1]["content"]))
+        return iter([chunk('{"ratings": []}')])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    model = EditorialLLM(cfg, client_factory=lambda _cfg: client)
+
+    def check(answer):
+        if "previous_error" not in seen[-1]:
+            raise ValueError("missing dimension(s) ['analytical_depth']")
+        return "corrected"
+
+    assert model("rank", {"text": "x"}, check=check) == "corrected"
+    assert len(calls) == 2
+    assert "analytical_depth" in seen[-1]["previous_error"]
+    assert [entry["retries"] for entry in model.stage_log] == [0, 1]
+
+
+def test_check_result_is_returned_instead_of_the_raw_object(cfg):
+    calls: list = []
+    model = fake(cfg, '{"ratings": []}', calls)
+    assert model("rank", {"text": "x"}, check=lambda answer: "parsed") == "parsed"
 
 
 def test_changed_payload_misses_the_cache(cfg, tmp_path):

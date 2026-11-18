@@ -84,7 +84,11 @@ class FakeLLM:
         self.answers = {stage: list(items) for stage, items in answers.items()}
         self.calls: list[tuple[str, dict]] = []
 
-    def __call__(self, stage, payload):
+    def __call__(self, stage, payload, check=None):
+        """Mirror EditorialLLM: validate the answer here so `check` is exercised."""
+        return check(self._answer(stage, payload)) if check is not None else self._answer(stage, payload)
+
+    def _answer(self, stage, payload):
         self.calls.append((stage, payload))
         queue = self.answers.get(stage)
         if not queue:
@@ -217,6 +221,34 @@ def test_script_to_scenes_refuses_to_truncate(cfg, briefs, selection):
         scripting.script_to_scenes(script, cfg)
 
 
+def test_narration_budget_converts_the_duration_window(cfg):
+    budget = scripting.narration_budget(cfg)
+    assert budget["target_duration_ms"] == [360000, 600000]
+    assert budget["min_chars"] == int(360 * 3.28)
+    assert budget["max_chars"] == int(600 * 3.28)
+    assert budget["hard_max_chars"] == int(budget["max_chars"] * 1.15)
+
+
+def test_check_length_flags_an_over_long_script(cfg, briefs, selection):
+    script = make_script(cfg, briefs, selection)
+    short = scripting.check_length(script, cfg)
+    assert short["over"] is False
+    cfg["editorial"]["speech_chars_per_second"] = 0.01
+    over = scripting.check_length(script, cfg)
+    assert over["over"] is True and over["chars"] == short["chars"]
+
+
+def test_critique_gate_refuses_an_over_long_script(cfg, briefs, selection):
+    script = make_script(cfg, briefs, selection)
+    cfg["editorial"]["speech_chars_per_second"] = 0.01
+    report = critique_module.critique(script, briefs, cfg, FakeLLM(
+        {"critique": [{"scores": scores(9), "problems": []}]}))
+    assert report["length"]["over"] is True
+    assert any("超出时长预算" in problem for problem in report["problems"])
+    with pytest.raises(ValueError, match="above the hard ceiling"):
+        critique_module.critique_gate(report, cfg)
+
+
 def test_validate_rubric_rejects_malformed_scores():
     with pytest.raises(ValueError, match="missing dimension"):
         scripting.validate_rubric({d: 5 for d in CRITIQUE_DIMENSIONS[:-1]}, "critique")
@@ -260,6 +292,20 @@ def test_build_script_with_critique_returns_on_a_passing_review(cfg, briefs, sel
     assert report["failed"] == []
     assert script.critique["scores"]["clarity"] == 9
     assert llm.count("script") == 1
+
+
+def test_an_over_long_script_is_sent_back_for_revision(cfg, briefs, selection):
+    cfg["editorial"]["max_revisions"] = 1
+    cfg["editorial"]["speech_chars_per_second"] = 0.05
+    candidates = [candidate("story_001", "经济数据发布", SOURCE_A, 1, "c1"),
+                  candidate("story_002", "出口数据发布", SOURCE_B, 2, "c2")]
+    llm = FakeLLM({
+        "script": [script_answer(), script_answer()],
+        "critique": [{"scores": scores(9), "problems": []}, {"scores": scores(9), "problems": []}],
+    })
+    with pytest.raises(ValueError, match="still below threshold after 1 revision"):
+        critique_module.build_script_with_critique(briefs, selection, cfg, llm, candidates)
+    assert llm.count("script") == 2, "the over-long script must be revised, not published"
 
 
 def test_build_script_with_critique_revises_then_gives_up(cfg, briefs, selection):

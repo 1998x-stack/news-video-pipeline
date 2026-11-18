@@ -7,7 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENTS = ["news-producer", "news-editorial-auditor", "news-storyboard-director",
-          "news-timing-engineer", "news-qa-reviewer"]
+          "news-timing-engineer", "news-qa-reviewer", "news-curator", "news-analyst"]
+SKILL_COUNT = 11
 # Backticked repo-relative resources that a Skill or adapter promises to the model.
 # Only spans that are a single repo path (with a directory part) are treated as
 # references, so bare artifact names like `qa_report.json` and placeholders like
@@ -44,8 +45,8 @@ def missing_resources(text_source):
 
 def validate():
     skills = sorted(p for p in (ROOT / "skills").iterdir() if p.is_dir())
-    if len(skills) != 9:
-        raise ValueError("Expected exactly nine canonical skills")
+    if len(skills) != SKILL_COUNT:
+        raise ValueError(f"Expected exactly {SKILL_COUNT} canonical skills")
     for folder in skills:
         spec = (folder / "SKILL.md").read_text(encoding="utf-8")
         front = re.match(r"\A---\nname: ([a-z0-9-]+)\ndescription: ([^\n]+)\n---\n", spec)

@@ -43,7 +43,11 @@ class FakeLLM:
         self.fail_stage = fail_stage
         self.calls: list[tuple[str, dict]] = []
 
-    def __call__(self, stage, payload):
+    def __call__(self, stage, payload, check=None):
+        """Mirror EditorialLLM: validate the answer here so `check` is exercised."""
+        return check(self._answer(stage, payload)) if check is not None else self._answer(stage, payload)
+
+    def _answer(self, stage, payload):
         self.calls.append((stage, payload))
         if stage == self.fail_stage:
             raise AssertionError(f"stage {stage} must not be called")

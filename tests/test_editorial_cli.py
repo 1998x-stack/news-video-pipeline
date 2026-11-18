@@ -27,7 +27,12 @@ class FakeEditorialModel:
     def __init__(self):
         self.calls: list[str] = []
 
-    def __call__(self, stage: str, payload: dict) -> dict:
+    def __call__(self, stage, payload, check=None):
+        """Mirror EditorialLLM: validate the answer here so `check` is exercised."""
+        result = self._answer(stage, payload)
+        return check(result) if check is not None else result
+
+    def _answer(self, stage: str, payload: dict) -> dict:
         self.calls.append(stage)
         if stage == "aggregate_split":
             text = payload["text"]

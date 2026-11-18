@@ -74,7 +74,11 @@ class FakeLLM:
         self.answers = list(answers)
         self.calls: list[tuple[str, dict]] = []
 
-    def __call__(self, stage, payload):
+    def __call__(self, stage, payload, check=None):
+        """Mirror EditorialLLM: validate the answer here so `check` is exercised."""
+        return check(self._answer(stage, payload)) if check is not None else self._answer(stage, payload)
+
+    def _answer(self, stage, payload):
         self.calls.append((stage, payload))
         item = self.answers.pop(0)
         if isinstance(item, Exception):
@@ -119,6 +123,20 @@ def test_build_brief_rejects_a_brief_with_no_fact(cfg):
 def test_build_brief_rejects_an_invented_number_anywhere_in_the_prose(cfg):
     with pytest.raises(ValueError, match="not in the story source"):
         insight.build_brief(brief_payload(mechanisms=["投资增长7.9%，说明政策见效。"]), candidate(), cfg)
+
+
+def test_a_dependency_written_as_an_ordinal_is_resolved(cfg):
+    """The gateway labels a claim `c2` and may then refer to it as `claim_2`."""
+    payload = brief_payload()
+    payload["claims"] = [
+        {"kind": "OPINION", "text": "我认为结构比总量更值得看。", "reasoning": "判断标准是结构。"},
+        {"kind": "FACT", "text": "前三季度国内生产总值同比增长5.2%",
+         "quote": "前三季度国内生产总值同比增长5.2%", "reasoning": "原文"},
+        {"kind": "INFERENCE", "text": "这意味着增长保持稳定。",
+         "quote": "前三季度国内生产总值同比增长5.2%", "depends_on": ["claim_2"], "reasoning": "由事实推出"},
+    ]
+    brief = insight.build_brief(payload, candidate(), cfg)
+    assert brief.claims[2].depends_on == (brief.claims[1].claim_id,)
 
 
 def test_build_brief_rejects_an_unknown_dependency(cfg):

@@ -110,6 +110,10 @@ def validate_editorial(editorial: dict) -> dict:
     headings = editorial.get("aggregate_headings")
     if not isinstance(headings, list) or not headings or any(not isinstance(x, str) or not x.strip() for x in headings):
         raise ValueError("editorial.aggregate_headings must be a non-empty list of strings")
+    if not 0 < float(editorial["speech_chars_per_second"]) <= 20:
+        raise ValueError("editorial.speech_chars_per_second must be in (0, 20]")
+    if not 1.0 <= float(editorial["length_tolerance"]) <= 2.0:
+        raise ValueError("editorial.length_tolerance must be within 1.0..2.0")
     window = editorial.get("target_duration_ms")
     if (not isinstance(window, list) or len(window) != 2
             or not all(isinstance(x, int) for x in window) or window[0] >= window[1] or window[0] <= 0):

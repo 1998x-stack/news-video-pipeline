@@ -52,11 +52,53 @@ def validate_rubric(scores: dict, stage: str) -> dict[str, int]:
     return dict(scores)
 
 
+def narration_budget(cfg: dict) -> dict:
+    """Convert the 6-10 minute target into a spoken-character budget.
+
+    The clock stays the TTS sample count; this budget is how the *writer* is asked to
+    fit it. It is never enforced by cutting narration afterwards.
+    """
+    options = cfg["editorial"]
+    low_ms, high_ms = [int(x) for x in options["target_duration_ms"]]
+    rate = float(options["speech_chars_per_second"])
+    tolerance = float(options["length_tolerance"])
+    minimum = int(low_ms / 1000 * rate)
+    maximum = int(high_ms / 1000 * rate)
+    return {
+        "min_chars": minimum,
+        "max_chars": maximum,
+        "hard_max_chars": int(maximum * tolerance),
+        "speech_chars_per_second": rate,
+        "target_duration_ms": [low_ms, high_ms],
+    }
+
+
+def narration_chars(script: EditorialScript) -> int:
+    return len(narration_text(script))
+
+
+def check_length(script: EditorialScript, cfg: dict) -> dict:
+    """Deterministic length verdict: under, in-window, or over the hard ceiling."""
+    budget = narration_budget(cfg)
+    chars = narration_chars(script)
+    return {
+        "chars": chars,
+        **budget,
+        "over": chars > budget["hard_max_chars"],
+        "under": chars < budget["min_chars"],
+        "note": (
+            "Length is measured in spoken characters and never fixed by truncation; "
+            "an out-of-budget script is sent back for a bounded revision and then fails."
+        ),
+    }
+
+
 def script_payload(briefs: list[AnalysisBrief], selection: EditorialSelection, cfg: dict) -> dict:
     """What the script writer sees: validated briefs, not the raw programme."""
     return {
         "top_k": selection.top_k,
         "target_duration_ms": list(cfg["editorial"]["target_duration_ms"]),
+        "narration_char_budget": narration_budget(cfg),
         "selected": list(selection.selected),
         "stories": [
             {
@@ -113,7 +155,14 @@ def build_script(briefs: list[AnalysisBrief], selection: EditorialSelection, cfg
     if not briefs:
         raise ValueError("build_script: no analysis briefs; refusing to write a script from nothing")
     ids = [brief.story_id for brief in briefs]
-    answer = llm("script", script_payload(briefs, selection, cfg))
+    return llm("script", script_payload(briefs, selection, cfg),
+               check=lambda answer: _script_from_answer(answer, briefs, selection, cfg))
+
+
+def _script_from_answer(answer: dict, briefs: list[AnalysisBrief], selection: EditorialSelection,
+                        cfg: dict, critique_report: dict | None = None) -> EditorialScript:
+    """Build the script from one model answer, or fail closed (runs inside the call)."""
+    ids = [brief.story_id for brief in briefs]
     opening = str(answer.get("opening_hook") or "").strip()
     closing = str(answer.get("closing_synthesis") or "").strip()
     if not opening:
@@ -132,6 +181,7 @@ def build_script(briefs: list[AnalysisBrief], selection: EditorialSelection, cfg
         closing_synthesis=closing,
         body=body,
         story_ids=tuple(ids),
+        critique=critique_report or {},
     )
 
 

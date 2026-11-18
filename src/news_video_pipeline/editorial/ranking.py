@@ -100,45 +100,67 @@ def rate_candidates(candidates: list[StoryCandidate], cfg: dict, llm) -> list[St
     size = int(options["batch_size"])
     ratings: list[StoryRating] = []
     for group in _batch(ordered, size):
-        answer = llm("rank", _payload(group))
-        entries = answer.get("ratings")
-        if not isinstance(entries, list):
-            raise ValueError("rank: 'ratings' must be a JSON array")
-        seen: set[str] = set()
-        expected = {item.story_id for item in group}
-        for raw in entries:
-            if not isinstance(raw, dict):
-                raise ValueError("rank: every rating must be a JSON object")
-            story_id = str(raw.get("story_id", ""))
-            if story_id not in expected:
-                raise ValueError(f"rank: answer mentions unknown story_id {story_id!r}")
-            if story_id in seen:
-                raise ValueError(f"rank: {story_id} was scored twice in one answer")
-            seen.add(story_id)
-            scores = validate_scores(raw.get("scores"), "rank")
-            reasons = raw.get("reasons")
-            if not isinstance(reasons, dict) or set(reasons) != set(DIMENSIONS):
-                raise ValueError(f"rank: {story_id} must give a reason for every dimension")
-            flags = list(features(next(item for item in group if item.story_id == story_id))["flags"])
-            new_information = raw.get("new_information") or []
-            if isinstance(new_information, list) and not new_information:
-                flags.append("no_new_information")
-            source = next(item for item in group if item.story_id == story_id)
-            ratings.append(StoryRating(
-                story_id=story_id,
-                scores=scores,
-                reasons={d: str(reasons[d]) for d in DIMENSIONS},
-                weighted_total=weighted_total(scores, weights),
-                topic=str(raw.get("topic") or "").strip(),
-                confidence=validate_confidence(raw.get("confidence", 0.0), "rank"),
-                flags=tuple(dict.fromkeys(flags)),
-                duplicate_of=source.duplicate_of,
-            ))
-        missing = sorted(expected - seen)
-        if missing:
-            raise ValueError(f"rank: no rating returned for {missing}")
+        ratings.extend(llm("rank", _payload(group), check=lambda answer: _parse_ratings(answer, group, weights)))
     order = {item.story_id: item.block_index for item in candidates}
     return sorted(ratings, key=lambda rating: (-rating.weighted_total, order.get(rating.story_id, 0)))
+
+
+def _reason_text(value, where: str) -> str:
+    """A reason is free text; the gateway sometimes sends several strings instead of one.
+
+    Observed from the real gateway: a multi-clause justification comes back as
+    ``["点一", "点二"]``. Joining it keeps the model's own wording; anything else is
+    rejected, so a malformed reason can never pass as an explanation.
+    """
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, list) and value and all(isinstance(x, str) and x.strip() for x in value):
+        return "；".join(x.strip() for x in value)
+    raise ValueError(f"{where} must be a non-empty string (or a list of strings), got {value!r}")
+
+
+def _parse_ratings(answer: dict, group: list[StoryCandidate], weights: dict) -> list[StoryRating]:
+    """Validate one batch answer. Runs inside the LLM call, so a formatting slip is retried."""
+    entries = answer.get("ratings")
+    if not isinstance(entries, list):
+        raise ValueError("rank: 'ratings' must be a JSON array")
+    by_id = {item.story_id: item for item in group}
+    expected = set(by_id)
+    seen: set[str] = set()
+    ratings: list[StoryRating] = []
+    for raw in entries:
+        if not isinstance(raw, dict):
+            raise ValueError("rank: every rating must be a JSON object")
+        story_id = str(raw.get("story_id", ""))
+        if story_id not in expected:
+            raise ValueError(f"rank: answer mentions unknown story_id {story_id!r}")
+        if story_id in seen:
+            raise ValueError(f"rank: {story_id} was scored twice in one answer")
+        seen.add(story_id)
+        scores = validate_scores(raw.get("scores"), "rank")
+        reasons = raw.get("reasons")
+        if not isinstance(reasons, dict) or set(reasons) != set(DIMENSIONS):
+            raise ValueError(f"rank: {story_id} must give a reason for every dimension")
+        reasons = {d: _reason_text(reasons[d], f"rank: {story_id}.{d}") for d in DIMENSIONS}
+        source = by_id[story_id]
+        flags = list(features(source)["flags"])
+        new_information = raw.get("new_information") or []
+        if isinstance(new_information, list) and not new_information:
+            flags.append("no_new_information")
+        ratings.append(StoryRating(
+            story_id=story_id,
+            scores=scores,
+            reasons=reasons,
+            weighted_total=weighted_total(scores, weights),
+            topic=str(raw.get("topic") or "").strip(),
+            confidence=validate_confidence(raw.get("confidence", 0.0), "rank"),
+            flags=tuple(dict.fromkeys(flags)),
+            duplicate_of=source.duplicate_of,
+        ))
+    missing = sorted(expected - seen)
+    if missing:
+        raise ValueError(f"rank: no rating returned for {missing}")
+    return ratings
 
 
 def ranked_table(ratings: list[StoryRating], candidates: list[StoryCandidate] | None = None) -> list[dict]:

@@ -44,7 +44,11 @@ class FakeLLM:
         self.answers = list(answers)
         self.calls: list[tuple[str, dict]] = []
 
-    def __call__(self, stage, payload):
+    def __call__(self, stage, payload, check=None):
+        """Mirror EditorialLLM: validate the answer here so `check` is exercised."""
+        return check(self._answer(stage, payload)) if check is not None else self._answer(stage, payload)
+
+    def _answer(self, stage, payload):
         self.calls.append((stage, payload))
         return self.answers.pop(0)
 
@@ -161,6 +165,24 @@ def test_rate_candidates_flags_missing_new_information(cfg):
     llm = FakeLLM([ratings_payload([entry("story_001", new_information=[])])])
     ratings = ranking.rate_candidates(items, cfg, llm)
     assert "no_new_information" in ratings[0].flags
+
+
+def test_a_reason_returned_as_a_list_is_joined_not_rejected(cfg):
+    """The real gateway sends several strings for one multi-clause justification."""
+    items = [candidate("story_001", "甲", "内容甲。" * 20)]
+    entry_with_list = entry("story_001")
+    entry_with_list["reasons"]["analytical_depth"] = ["机制清楚", "但缺少反例"]
+    llm = FakeLLM([ratings_payload([entry_with_list])])
+    ratings = ranking.rate_candidates(items, cfg, llm)
+    assert ratings[0].reasons["analytical_depth"] == "机制清楚；但缺少反例"
+
+
+def test_a_reason_of_the_wrong_type_is_rejected(cfg):
+    items = [candidate("story_001", "甲", "内容甲。" * 20)]
+    broken = entry("story_001")
+    broken["reasons"]["analytical_depth"] = {"why": "太含糊"}
+    with pytest.raises(ValueError, match="analytical_depth must be a non-empty string"):
+        ranking.rate_candidates(items, cfg, FakeLLM([ratings_payload([broken])]))
 
 
 def test_rate_candidates_rejects_an_unknown_story_id(cfg):

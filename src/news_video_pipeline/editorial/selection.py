@@ -62,12 +62,16 @@ def compare(shortlisted: list[StoryRating], candidates: list[StoryCandidate], cf
             for rating in shortlisted
         ]
     }
-    answer = llm("compare", payload)
+    expected_ids = {rating.story_id for rating in shortlisted}
+    totals = {rating.story_id: rating.weighted_total for rating in shortlisted}
+    return llm("compare", payload, check=lambda answer: _parse_comparisons(answer, expected_ids, totals, known))
+
+
+def _parse_comparisons(answer: dict, expected: set[str], totals: dict[str, float],
+                       known: set[str]) -> dict[str, dict]:
     entries = answer.get("comparisons")
     if not isinstance(entries, list):
         raise ValueError("compare: 'comparisons' must be a JSON array")
-    expected = {rating.story_id for rating in shortlisted}
-    totals = {rating.story_id: rating.weighted_total for rating in shortlisted}
     resolved: dict[str, dict] = {}
     for raw in entries:
         if not isinstance(raw, dict):

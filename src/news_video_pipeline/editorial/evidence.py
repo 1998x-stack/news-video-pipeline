@@ -144,6 +144,7 @@ def validate_claims(claims: list[Claim], candidate: StoryCandidate, cfg: dict) -
     source_numbers = set(NUMERIC.findall(candidate.source_text))
     facts = 0
     anchored = 0
+    exact_excerpts = 0
     for claim in claims:
         counts[claim.kind] += 1
         if claim.story_id != candidate.story_id:
@@ -160,10 +161,14 @@ def validate_claims(claims: list[Claim], candidate: StoryCandidate, cfg: dict) -
                     f"{claim.claim_id}: number(s) {invented} are not present in its cited source span"
                 )
             ratio = overlap_ratio(claim.text, cited)
-            if ratio < minimum:
+            exact = normalize_text(claim.text) in normalize_text(cited)
+            if exact:
+                exact_excerpts += 1
+            elif ratio < minimum:
                 raise ValueError(
-                    f"{claim.claim_id}: FACT is not anchored in its cited span "
-                    f"(overlap {ratio:.2f} < editorial.fact_anchor_min={minimum}); a paraphrase is not a quotation"
+                    f"{claim.claim_id}: FACT text is neither a verbatim excerpt of its cited span nor "
+                    f"close to it (overlap {ratio:.2f} < editorial.fact_anchor_min={minimum}). "
+                    "Quote the source verbatim: copy a contiguous fragment, do not paraphrase."
                 )
             anchored += 1
         else:
@@ -191,6 +196,7 @@ def validate_claims(claims: list[Claim], candidate: StoryCandidate, cfg: dict) -
         "claims": len(claims),
         "counts": counts,
         "anchored_ratio": 1.0 if facts == 0 else round(anchored / facts, 4),
+        "exact_excerpts": exact_excerpts,
         "facts": facts,
         "note": "Lexical and numeric guards only; semantic entailment still needs a human.",
     }

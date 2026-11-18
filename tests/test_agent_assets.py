@@ -53,10 +53,22 @@ def call(*args, env=None):
                           cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)
 
 def test_catalog_valid():
+    """The catalog gate must see the full skill/role set, not a subset."""
     r = subprocess.run([sys.executable, str(VALIDATOR)], cwd=ROOT,
                        capture_output=True, text=True, timeout=30)
     assert r.returncode == 0, r.stderr
-    assert "'skills': 9" in r.stdout and "'agents': 5" in r.stdout
+    assert "'skills': 11" in r.stdout and "'agents': 7" in r.stdout
+
+def test_catalog_covers_every_skill_and_role_directory():
+    """The asserted counts must equal the real directories, in both directions."""
+    skills = sorted(p.name for p in (ROOT / "skills").iterdir() if p.is_dir())
+    assert len(skills) == 11
+    assert {"news-story-selection", "news-insight-analysis"} <= set(skills)
+    assert validate_skills.SKILL_COUNT == len(skills)
+    agents = sorted(p.stem for p in (ROOT / "agents").glob("*.md"))
+    assert sorted(validate_skills.AGENTS) == agents == [
+        "news-analyst", "news-curator", "news-editorial-auditor", "news-producer",
+        "news-qa-reviewer", "news-storyboard-director", "news-timing-engineer"]
 
 def test_pi_install_is_idempotent(tmp_path):
     for _ in range(2):

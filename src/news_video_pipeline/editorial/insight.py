@@ -79,6 +79,24 @@ def build_brief(raw: dict, candidate: StoryCandidate, cfg: dict) -> AnalysisBrie
             raise ValueError(f"{story_id}: claim_id {local!r} is used twice")
         names[local] = f"{story_id}_claim_{position:02d}"
         entries.append((names[local], entry))
+    def resolve(reference: str) -> str:
+        """Resolve a dependency the model wrote.
+
+        The gateway sometimes labels a claim ``c2`` and then refers to it as
+        ``claim_2`` (or omits the id entirely). A trailing ordinal is therefore
+        resolved positionally; anything else is passed through unchanged and then
+        rejected by ``claim_from_llm``, so an unknown dependency still fails closed.
+        """
+        token = str(reference).strip()
+        if token in names:
+            return names[token]
+        match = re.search(r"(\d+)$", token)
+        if match:
+            position = int(match.group(1))
+            if 1 <= position <= len(entries):
+                return entries[position - 1][0]
+        return token
+
     built: dict[str, Claim] = {}
     for name, entry in entries:
         if str(entry.get("kind", "")).strip().upper() != "FACT":
@@ -91,7 +109,7 @@ def build_brief(raw: dict, candidate: StoryCandidate, cfg: dict) -> AnalysisBrie
         if not isinstance(dependencies, list):
             raise ValueError(f"{story_id}: depends_on must be an array")
         built[name] = claim_from_llm(
-            {**entry, "depends_on": [names.get(str(d), str(d)) for d in dependencies]},
+            {**entry, "depends_on": [resolve(d) for d in dependencies]},
             story_id, candidate, name, built,
         )
     claims = [built[name] for name, _ in entries]
@@ -114,6 +132,14 @@ def build_brief(raw: dict, candidate: StoryCandidate, cfg: dict) -> AnalysisBrie
     )
 
 
+def _checked_brief(answer: dict, candidate: StoryCandidate, cfg: dict) -> AnalysisBrief:
+    """Runs inside the LLM call, so a brief whose FACT is not an excerpt is retried."""
+    raw = answer.get("brief")
+    if not isinstance(raw, dict):
+        raise ValueError(f"{candidate.story_id}: the brief answer must contain a JSON object under 'brief'")
+    return build_brief(raw, candidate, cfg)
+
+
 def build_briefs(selected: list[str], candidates: list[StoryCandidate], cfg: dict, llm) -> list[AnalysisBrief]:
     """One brief per selected story, in selection order."""
     by_id = {item.story_id: item for item in candidates}
@@ -123,16 +149,12 @@ def build_briefs(selected: list[str], candidates: list[StoryCandidate], cfg: dic
     briefs: list[AnalysisBrief] = []
     for story_id in selected:
         candidate = by_id[story_id]
-        answer = llm("brief", {
+        briefs.append(llm("brief", {
             "story_id": story_id,
             "headline": candidate.headline,
             "section": candidate.section,
             "text": candidate.source_text,
-        })
-        raw = answer.get("brief")
-        if not isinstance(raw, dict):
-            raise ValueError(f"{story_id}: the brief answer must contain a JSON object under 'brief'")
-        briefs.append(build_brief(raw, candidate, cfg))
+        }, check=lambda answer, candidate=candidate: _checked_brief(answer, candidate, cfg)))
     return briefs
 
 
