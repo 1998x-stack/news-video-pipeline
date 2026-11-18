@@ -2,9 +2,11 @@
 
 [![CI](https://github.com/1998x-stack/news-video-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/1998x-stack/news-video-pipeline/actions/workflows/ci.yml)
 
-**状态：v0.1.1 可运行的生产内核（非无人审核发布系统）**。支持输入：新闻联播文字稿、普通新闻稿、长文章，格式为 `.txt`、`.md` 或 JSON `{ "title": "...", "body": "..." }`。
+**状态：v0.1.2 可运行的生产内核（非无人审核发布系统）**。支持输入：新闻联播文字稿、普通新闻稿、长文章，格式为 `.txt`、`.md` 或 JSON `{ "title": "...", "body": "..." }`。
 
 核心原则：**先生成逐句音频，以实际 PCM 采样数生成统一 timeline，所有产物均从同一个场景模型派生。** 不用 Whisper 猜测已知 TTS 句子时间戳。
+
+本轮本地实测（Pi + `iagent/standard` 网关）已用 2026-11-14…16 三期新闻联播真实文字稿跑通全流程，证据见 [本地部署验证报告](docs/verification/pi-deepseek-local.md)。
 
 ## 已实现 vs 尚未实现
 
@@ -12,7 +14,9 @@
 |---|---|---|
 | TXT / Markdown / JSON 输入 | ✅ | 单篇文章/稿件，不联网自动抓取 |
 | 可重复场景规划 | ✅ | 默认规则切分，拒绝静默截断 |
-| OpenAI 兼容 LLM 规划 | ✅ 可选 | 需 API；输出仍须审核事实 |
+| 场景长度契约 | ✅ | 无论规则还是 LLM 分镜，场景/标题长度都由代码统一裁剪分组，超限报错而不是溢出幻灯片 |
+| OpenAI 兼容 LLM 规划 | ✅ 可选 | 流式请求 + 可配置超时/`max_tokens`/`reasoning_effort`；输出必须通过 grounding 守卫 |
+| LLM 事实守卫 | ✅ | 旁白中的数字/日期必须出现在原文，且与原文匹配率低于阈值即失败，绝不渲染凭空生成的数字 |
 | PPTX | ✅ | 由文本形状生成、可在 PowerPoint 中编辑 |
 | 每页 PNG | ✅ | 与 PPTX 共用场景数据，视频以 PNG 为画面源 |
 | TTS | ✅ | espeak(-ng) 离线；可选 Edge TTS；`synthetic` 仅测试音调 |
@@ -20,16 +24,21 @@
 | WAV + MP3 | ✅ | WAV 用于合成，MP3 用于交付 |
 | FFmpeg MP4 | ✅ | 16:9 静态幻灯片视频，无动画；独立质量检测 |
 | 基于文件哈希的缓存和重复执行 | ✅ | 相同内容、配置与版本可以复用，支持 `--force` |
+| 产物完整性校验 | ✅ | `news-video validate` 校验 manifest 中每个文件的 SHA-256、状态与路径安全 |
+| 环境与冒烟报告 | ✅ | `scripts/check_environment.py`、`scripts/smoke_test.py` 输出可复现的 JSON 证据（密钥只报告 set/unset） |
 | Whisper ASR 复检 | ✅ 可选 | `faster-whisper`，需要模型下载和算力 |
 | 多源事实验证、版权许可自动判断 | ❌ | 必须人工核验；后续阶段实现证据管理 |
 | 9:16 重排、字幕硬烧、自动上传 | ❌ | 留待 P1/P2；不存在自动发布行为 |
 
 ## 环境要求
 
-- Python 3.10+；FFmpeg + ffprobe；能够显示中文的 Noto CJK 字体
+- Python 3.10+（本地实测 3.12.15）；FFmpeg + ffprobe；能够显示中文的 Noto CJK 字体
 - 默认离线 TTS 需要 `espeak-ng`（或者 `espeak`）；中文效果偏机械，**用于闭环功能验证，不作为最终发布音质推荐**
+- 实测节奏：espeak-ng `-v zh -s 155` 约 3.3 字/秒，一篇 1.6 千字稿件约 7.7 分钟旁白，整期新闻联播（约 6.5 千字）约 33 分钟；需要更快的节奏请提高 `voice.rate`
 - `edge` TTS 和 `openai-compatible` LLM 可选，需要相应网络、依赖、账号权限；不保证服务商长期可用
 - Windows 原生环境需要为 `fcntl` 文件锁提供替代实现，初版支持 Linux/macOS/Docker
+
+中文字体解析顺序：`render.font_path` → `fc-match "Noto Sans CJK SC"` → 常见 Linux Noto 路径；都找不到就报错，不会静默退化成无中文的失败产物。
 
 ### 本地快速启动（Linux/macOS）
 
@@ -51,9 +60,16 @@ news-video validate outputs/sample_news-<RUN_ID>
 
 # 重新渲染（适合调试）
 news-video run --input examples/sample_news.md --out outputs --force
+
+# 整期长稿：场景数超过默认上限时提高上限，绝不截断原文
+news-video run --input outputs/news/xinwenlianbo-20261114.md --config config/longform.yaml
 ```
 
-macOS 可使用 Homebrew 安装 `ffmpeg`、`espeak-ng` 和 Noto 中文字体，或优先使用 Docker。
+macOS 可使用 Homebrew 安装 `ffmpeg`、`espeak-ng` 和 Noto 中文字体，或优先使用 Docker：
+
+```bash
+brew install ffmpeg espeak-ng fontconfig
+```
 
 ### Docker
 
@@ -75,10 +91,24 @@ pip install -e '.[llm,whisper,edge]'
 export OPENAI_API_KEY='YOUR_SECRET'
 export OPENAI_MODEL='YOUR_COMPATIBLE_MODEL'
 export OPENAI_BASE_URL='https://your-provider.example/v1'
+news-video plan --input article.md --config config/llm.yaml
 news-video run --input article.md --config config/llm-whisper.yaml
 ```
 
-默认仍是规则规划，完全离线可运行。`planner.provider: openai-compatible` 是可选模块；兼容端点是否支持当前 Chat Completions 参数应自行测试。**不要把敏感信息写进 YAML 或 Git 仓库。** Whisper 用于最终旁白的转写相似度检查，而非取代 TTS 已知的句子边界。
+默认仍是规则规划，完全离线可运行。`planner.provider: openai-compatible` 是可选模块，**兼容端点是否支持当前参数必须实测**：
+
+| 配置 | 默认 | 作用 |
+|---|---|---|
+| `planner.timeout_s` | 240 | 单次 socket 读取超时（请求是流式的，慢稿件不会因此失败） |
+| `planner.max_total_s` | 900 | 一次规划调用的硬性墙钟上限，避免网络挂死 |
+| `planner.max_tokens` | 8192 | **思维链与答案共用**，过小会导致只有推理没有正文 |
+| `planner.max_retries` | 1 | 失败重试次数 |
+| `planner.reasoning_effort` | 空 | 留空则不发送该字段；`none` 可关闭冗长思维链（本机网关实测把 1.6 千字稿件从超时降到约 40 秒） |
+| `planner.min_source_coverage` | 0.75 | grounding 守卫阈值：旁白与原文的匹配率下限 |
+
+任何返回值都必须通过 grounding 守卫：旁白中出现的数字/日期必须在原文中出现，且与原文的字符匹配率不得低于阈值，否则**整个任务失败**，不会生成待审核的半成品。这仍是启发式守卫，不能替代人工事实核验。
+
+**不要把敏感信息写进 YAML 或 Git 仓库。** Whisper 用于最终旁白的转写相似度检查，而非取代 TTS 已知的句子边界。
 
 Edge 示例配置见 `config/edge.yaml`；注意 Edge TTS 非正式商业生产服务接口，使用前核查许可和使用条款。
 
@@ -103,7 +133,21 @@ outputs/<input-stem>-<content-config-version-hash>/
 
 `timeline.json` 中每个 scene 有 `slide_index/start_ms/end_ms`，每句字幕有 `scene_id/start_ms/end_ms`。时长来自逐句 WAV 帧数；`qa_report.json` 检查字幕数、连续性、PPT 存在性、音频实际长度和 MP4 轨道/时长。`manifest.json` 保存生成版本、输入哈希、配置和输出文件哈希，`public_release_approved` 恒为 `false`。
 
+`news-video validate <输出目录>` 会重新计算 manifest 中每个文件的 SHA-256，并检查状态、路径是否越界；文件被改过、被删掉或 manifest 被手工改动都会明确失败。
+
 `outputs/.cache/tts/` 为公共句子音频缓存。相同输入和配置会命中整体输出；如任何输出文件哈希损坏，将重新生成。
+
+### 验证与可复现性
+
+```bash
+python scripts/validate_skills.py                         # 9 Skills / 5 Agents 静态校验
+python scripts/check_environment.py --strict              # 环境报告（密钥只输出 set/unset）
+python scripts/smoke_test.py                              # 默认只跑静态层
+python scripts/smoke_test.py --tier all-offline --report outputs/local/smoke.json
+python scripts/smoke_test.py --tier llm --input article.md # 付费层，必须显式指定
+```
+
+冒烟测试分层（static / offline / synthetic / tts / llm / llm-e2e / whisper），**默认永远不会触发付费或耗时检查**；缺少可选依赖时标记 `skipped` 而不是失败。
 
 ### 字幕为何不直接采用 Whisper？
 
@@ -122,6 +166,7 @@ outputs/<input-stem>-<content-config-version-hash>/
 - [系统架构、接口与故障边界](docs/architecture.md)
 - [工程任务拆解、验收标准与阶段路线](docs/roadmap.md)
 - [生产配置与部署策略](docs/deployment.md)
+- [本地部署验证报告（Pi + 新闻联播实测）](docs/verification/pi-deepseek-local.md)
 - [贡献与开发规则](AGENTS.md)
 
 ## 维护原则

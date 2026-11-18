@@ -11,10 +11,23 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-cjk fontconfig
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg espeak-ng fonts-noto-cjk fontconfig
       - name: Install package and tests
         run: pip install -e '.[test]'
       - name: Validate Agent / Skill catalog
         run: python scripts/validate_skills.py
       - name: Unit and synthetic E2E tests
         run: pytest -q
+      - name: Local environment report (no secrets)
+        run: python scripts/check_environment.py --strict --out environment.json
+      - name: Reproducible smoke test (static, offline, synthetic, real TTS)
+        run: python scripts/smoke_test.py --tier all-offline --report smoke-report.json
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-evidence
+          path: |
+            environment.json
+            smoke-report.json
+          if-no-files-found: warn

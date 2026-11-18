@@ -43,12 +43,15 @@ Codex 项目级 Skills 位于 .agents/skills，原生自定义 agent 可定义�
 | 目标 | 验证方式 |
 |---|---|
 | 技能元数据可识别 | python scripts/validate_skills.py |
+| Skill 承诺的资源真实存在 | validate_skills.py 解析 SKILL.md/适配器中的仓库路径；`tests/test_agent_assets.py` |
 | 可移植安装路径 | pytest -q tests/test_agent_assets.py |
 | 安装冲突与重复运行 | 上述 installer tests |
 | P0 Python 核心不回归 | PYTHONPATH=src pytest -q |
-| 真实 FFmpeg/TTS 视频可生成 | 按 README 安装依赖并执行 news-video run |
-| 技术验收 | news-video validate 及 audit_manifest.py |
+| 真实 FFmpeg/TTS 视频可生成 | python scripts/smoke_test.py --tier all-offline |
+| 真实 LLM 规划可用且不虚构事实 | python scripts/smoke_test.py --tier llm --input <稿件> |
+| 技术验收 | news-video validate（重算 manifest 哈希）及 audit_manifest.py |
 | 防止自动发布 | release_check.py 在未批准包上返回 2 |
+| Pi 真实发现 Skill / Prompt | `/skill:news-input-governance`、`/news-producer <参数>` 后检查 session JSONL（见 docs/agent-skills.md） |
 
 ## 六、残余风险
 
@@ -57,6 +60,8 @@ Codex 项目级 Skills 位于 .agents/skills，原生自定义 agent 可定义�
 - 代码中的 fcntl 依赖 POSIX，不能宣称 Windows 原生支持。
 - 用户级同时为多个工具安装可能发生同名 Skills，被某个工具优先选择；按目标工具单独安装可减少重复。
 - 目前诊断脚本只是 Stage sanity checks，不能替代核心 news-video validate、音画人工检查和内容审批。
+- 本仓库 `.agents/skills/` 里是薄入口，Pi 加载该 Skill 得到的是“指针 + 约束”，完整 playbook 需要模型再读一次；尚无自动化手段保证模型一定执行第二次读取。
+- LLM grounding 守卫是启发式的：拦得住虚构数字/日期与大幅离题，拦不住同义改写造成的语义漂移，也不检查中文汉字数字。
 
 官方机制参考：
 - Pi https://docs.pi.dev/latest/skills

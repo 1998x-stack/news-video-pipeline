@@ -8,6 +8,12 @@ planner:
   model: ''
   base_url: ''   # defaults to OPENAI_BASE_URL
   temperature: 0
+  timeout_s: 240          # per-read timeout; requests are streamed
+  max_total_s: 900        # hard wall-clock ceiling for one planning call
+  max_tokens: 8192        # thinking gateways share this between reasoning and answer
+  max_retries: 1
+  reasoning_effort: ''    # e.g. 'none' to suppress runaway reasoning (empty = omit field)
+  min_source_coverage: 0.75  # grounding guard
 voice:
   provider: espeak       # espeak | edge | synthetic (TEST ONLY)
   name: zh

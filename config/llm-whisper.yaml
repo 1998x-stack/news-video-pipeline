@@ -1,7 +1,24 @@
+# Optional LLM planning + independent Whisper ASR re-check.
+# Credentials come from the environment only: OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL.
+#
+#   export OPENAI_API_KEY=...          # never commit a real key
+#   export OPENAI_BASE_URL=https://your-endpoint/v1
+#   export OPENAI_MODEL=your-model-id
+#   news-video run --input article.md --config config/llm-whisper.yaml
 planner:
   provider: openai-compatible
   max_scenes: 16
   temperature: 0
+  # Thinking gateways may spend the whole max_tokens budget on hidden reasoning and
+  # then return no answer. `reasoning_effort: none` disables that trace; verified
+  # locally it cut a 1559-character manuscript from a hard timeout to ~40 s.
+  timeout_s: 240
+  max_total_s: 900        # hard wall-clock ceiling for one planning call
+  max_tokens: 8192
+  max_retries: 1
+  reasoning_effort: none
+  # Grounding guard: narration must stay inside the source text or the run fails.
+  min_source_coverage: 0.75
 voice:
   provider: espeak
   name: zh

@@ -5,9 +5,48 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "scripts/install_agents.py"
 VALIDATOR = ROOT / "scripts/validate_skills.py"
+sys.path.insert(0, str(ROOT / "scripts"))
+import validate_skills  # noqa: E402  (script module, imported by path)
+
+
+def test_skill_documents_only_reference_existing_resources():
+    """Every backticked repo path in a Skill/adapter must resolve."""
+    for folder in sorted(p for p in (ROOT / "skills").iterdir() if p.is_dir()):
+        text = (folder / "SKILL.md").read_text(encoding="utf-8")
+        assert not validate_skills.missing_resources([(folder.name, text, folder)])
+
+
+def test_reference_extraction_ignores_artifacts_and_placeholders():
+    text = "check `qa_report.json` then `references/source-provenance.md` and `skills/<id>/SKILL.md`"
+    assert validate_skills.referenced_resources(text) == ["references/source-provenance.md"]
+
+
+def test_reference_check_detects_a_dangling_path(tmp_path):
+    text = "read `references/missing-playbook.md`"
+    assert validate_skills.missing_resources([("fake", text, tmp_path)]) == [
+        "fake: references/missing-playbook.md"]
+
+
+def test_validator_fails_when_a_promised_resource_disappears():
+    """The catalog gate must fail, not warn, when a referenced resource is gone."""
+    folder = ROOT / "skills/news-quality-gate"
+    victim = folder / "references/qa-matrix.md"
+    backup = victim.read_bytes()
+    try:
+        victim.unlink()
+        with pytest.raises(ValueError):
+            validate_skills.validate()
+        assert validate_skills.missing_resources(
+            [("news-quality-gate", (folder / "SKILL.md").read_text(encoding="utf-8"), folder)]
+        ) == ["news-quality-gate: references/qa-matrix.md"]
+    finally:
+        victim.write_bytes(backup)
+    assert validate_skills.validate()["status"] == "passed"
 
 def call(*args, env=None):
     return subprocess.run([sys.executable, str(INSTALLER), *map(str, args)],

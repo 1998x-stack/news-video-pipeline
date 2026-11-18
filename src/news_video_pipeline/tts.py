@@ -12,6 +12,8 @@ import tempfile
 import wave
 from pathlib import Path
 
+from . import __version__
+
 
 def call(args: list[str]) -> None:
     result = subprocess.run(args, capture_output=True, text=True, timeout=180)
@@ -60,7 +62,7 @@ def synthesize(text: str, dest: Path, config: dict) -> None:
 
 def get_cached_audio(text: str, config: dict, cache: Path) -> Path:
     voice = config["voice"]
-    identity = {"text": text, "voice": voice, "engine_version": "0.1.0"}
+    identity = {"text": text, "voice": voice, "engine_version": __version__}
     digest = hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     cache.mkdir(parents=True, exist_ok=True)
     output = cache / f"{digest}.wav"
