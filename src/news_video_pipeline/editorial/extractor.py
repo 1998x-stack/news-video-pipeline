@@ -44,6 +44,7 @@ class Block:
     end: int
     section: str = ""
     is_aggregate: bool = False
+    split_status: str = "exact"
 
 
 def _paragraph_spans(body: str) -> list[tuple[int, int]]:
@@ -117,6 +118,7 @@ def segment(body: str, cfg: dict) -> tuple[list[Block], list[dict], dict]:
             end=block_end,
             section=text if text in aggregates else "",
             is_aggregate=text in aggregates,
+            split_status="uncertain" if text in aggregates else "exact",
         ))
         index = cursor
     stats = {"continuation_blocks": continuations, "skipped_lines": len(skipped)}
@@ -195,7 +197,108 @@ def dedupe(candidates: list[StoryCandidate]) -> tuple[list[StoryCandidate], dict
     return resolved, clusters
 
 
-def extract_candidates(body: str, source_title: str, cfg: dict, source_id: str = "") -> tuple[list[StoryCandidate], dict]:
+def verify_verbatim(block_text: str, pieces: list[str]) -> list[tuple[int, int]]:
+    """Locate each proposed item inside the block, or refuse the whole split.
+
+    The only tolerated difference is surrounding whitespace. If a model
+    paraphrases, drops, reorders or invents text, the split is rejected so the
+    container is kept intact rather than silently losing a story.
+    """
+    spans: list[tuple[int, int]] = []
+    cursor = 0
+    for piece in pieces:
+        if not isinstance(piece, str) or not piece.strip():
+            raise ValueError("aggregate split contains an empty item; expected verbatim text")
+        trimmed = piece.strip()
+        index = block_text.find(trimmed, cursor)
+        if index < 0 or block_text[cursor:index].strip():
+            raise ValueError(
+                "LLM aggregate split is not verbatim; refusing to lose source text or invent a story"
+            )
+        spans.append((index, index + len(trimmed)))
+        cursor = index + len(trimmed)
+    if block_text[cursor:].strip():
+        raise ValueError(
+            "LLM aggregate split is not verbatim; refusing to lose source text or invent a story"
+        )
+    return spans
+
+
+def _block_body(block: Block) -> tuple[str, int]:
+    """The block's text without its heading line, plus that body's absolute offset."""
+    heading_len = len(block.text.split("\n", 1)[0])
+    body = block.text[heading_len:]
+    left = len(body) - len(body.lstrip())
+    return body.strip(), block.start + heading_len + left
+
+
+def derived_headline(text: str, limit: int = 40) -> str:
+    """Recover a brief's own headline from a glued `headline + body` string.
+
+    Brief items repeat their headline at the start of their body (sometimes after
+    a connective such as 近日，), which is exactly how the boundary can be shown.
+    """
+    head = text[:limit]
+    for size in range(len(head), 7, -1):
+        prefix = text[:size]
+        if text.find(prefix, size, size + 6) != -1:
+            return prefix
+    marker = re.search(r"(近日|今天|昨天|日前|\d+月\d+日|[，；])", text)
+    if marker and 6 <= marker.start() <= limit:
+        return text[:marker.start()]
+    return head + ("…" if len(text) > limit else "")
+
+
+def split_aggregate(block: Block, cfg: dict, llm, diagnostics: list | None = None) -> list[Block]:
+    """Split one aggregate 联播快讯 block into its items, or keep it whole.
+
+    The model proposes the item texts; ``verify_verbatim`` proves they rebuild
+    the container byte-for-byte. Any failure keeps the container as one candidate
+    marked ``uncertain`` so a human can split it, and never drops content.
+    """
+    if not block.is_aggregate:
+        return [block]
+    body_text, offset = _block_body(block)
+    failure = "aggregate split returned fewer than two items"
+    try:
+        answer = llm("aggregate_split", {
+            "heading": block.heading,
+            "text": body_text,
+            "max_items": int(cfg["editorial"].get("max_split_items", 12)),
+        })
+        items = answer.get("items") if isinstance(answer, dict) else None
+        if not isinstance(items, list) or len(items) < 2:
+            raise ValueError(failure)
+        if len(items) > int(cfg["editorial"].get("max_split_items", 12)):
+            raise ValueError("aggregate split returned more items than editorial.max_split_items")
+        spans = verify_verbatim(body_text, [str(x) for x in items])
+    except Exception as error:  # noqa: BLE001 - any failure keeps the source intact
+        if diagnostics is not None:
+            diagnostics.append({
+                "heading": block.heading,
+                "start": block.start,
+                "error": f"{type(error).__name__}: {error}",
+            })
+        return [replace(block, split_status="uncertain")]
+    pieces: list[Block] = []
+    for index, (start, end) in enumerate(spans, 1):
+        text = body_text[start:end]
+        pieces.append(Block(
+            heading=derived_headline(text),
+            text=text,
+            start=offset + start,
+            end=offset + end,
+            section=block.heading,
+            is_aggregate=False,
+            split_status="llm_verified",
+        ))
+    if diagnostics is not None:
+        diagnostics.append({"heading": block.heading, "start": block.start, "items": len(pieces)})
+    return pieces
+
+
+def extract_candidates(body: str, source_title: str, cfg: dict, source_id: str = "",
+                       llm=None) -> tuple[list[StoryCandidate], dict]:
     """Return every independent story in the programme plus an extraction report."""
     if not body.strip():
         raise ValueError("Programme text is empty; nothing to extract")
@@ -203,6 +306,20 @@ def extract_candidates(body: str, source_title: str, cfg: dict, source_id: str =
     if not blocks:
         raise ValueError("Programme contains no news blocks; refusing to fabricate stories")
     source = source_id or f"input_{normalize_text(source_title)[:16] or 'programme'}"
+    diagnostics: list[dict] = []
+    expanded: list[Block] = []
+    for block in blocks:
+        if not (llm and block.is_aggregate):
+            expanded.append(block)
+            continue
+        parts = split_aggregate(block, cfg, llm, diagnostics)
+        if len(parts) > 1:
+            # The section label itself is not news content; record it so that the
+            # "no character is unaccounted for" invariant still holds.
+            _, body_offset = _block_body(block)
+            skipped.append({"start": block.start, "end": body_offset,
+                            "heading": block.heading, "reason": "aggregate_heading"})
+        expanded.extend(parts)
     candidates = [
         StoryCandidate(
             story_id=f"story_{index:03d}",
@@ -212,9 +329,9 @@ def extract_candidates(body: str, source_title: str, cfg: dict, source_id: str =
             source_text=block.text,
             block_index=index,
             section=block.section,
-            split_status="uncertain" if block.is_aggregate else "exact",
+            split_status=block.split_status,
         )
-        for index, block in enumerate(blocks, 1)
+        for index, block in enumerate(expanded, 1)
     ]
     candidates, clusters = dedupe(candidates)
     report = {
@@ -223,9 +340,11 @@ def extract_candidates(body: str, source_title: str, cfg: dict, source_id: str =
         "blocks": len(blocks),
         "candidates": len(candidates),
         "aggregate_blocks": sum(1 for b in blocks if b.is_aggregate),
+        "split_briefs": sum(1 for b in expanded if not b.is_aggregate and b.section),
         "uncertain_blocks": sum(1 for c in candidates if c.split_status == "uncertain"),
         "duplicate_clusters": {k: v for k, v in clusters.items() if len(v) > 1},
         "skipped_blocks": skipped,
+        "aggregate_failures": [d for d in diagnostics if "error" in d],
         "candidate_ids": [c.story_id for c in candidates],
         **stats,
     }
