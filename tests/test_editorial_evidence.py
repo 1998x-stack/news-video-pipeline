@@ -184,3 +184,18 @@ def test_fact_rejects_paraphrase_even_at_low_config_threshold(cfg):
     cfg["editorial"]["fact_anchor_min"] = 0.01
     with pytest.raises(ValueError, match="exact source quotation"):
         evidence.validate_claims([fact(text="前三季度国内生产总值同比升高5.2%")], candidate(), cfg)
+
+
+def test_fact_quote_cannot_drop_negative_or_percent_sign(cfg):
+    """Numeric signs and units convey meaning; generic text normalization drops them."""
+    source = "项目收益率为-5.2%，过去为5.2%。"
+    story = candidate(text=source)
+    quote = "收益率为-5.2%"
+    start = source.index(quote)
+    for altered in ("收益率为5.2%", "收益率为-5.2"):
+        changed = Claim(
+            claim_id="claim_sign", story_id="story_001", kind="FACT",
+            text=altered, source_spans=(SourceSpan(start, start + len(quote)),),
+        )
+        with pytest.raises(ValueError, match="exact source quotation"):
+            evidence.validate_claims([changed], story, cfg)

@@ -31,6 +31,16 @@ from ..planner import normalize_text
 
 NUMERIC = re.compile(r"\d+(?:[.,]\d+)*")
 
+# Only non-semantic Chinese sentence punctuation and whitespace may be omitted
+# from an exact quotation. Do NOT drop +, -, decimal points, %, ‰ or other
+# symbols that can reverse numerical meaning.
+NON_SEMANTIC_QUOTE_PUNCTUATION = re.compile(r"[\\s，。！？、；：]+")
+
+
+def normalize_fact_quote(text: str) -> str:
+    return NON_SEMANTIC_QUOTE_PUNCTUATION.sub("", text)
+
+
 
 def _span_text(candidate: StoryCandidate, span: SourceSpan) -> str:
     """Text of a claim span, mapped through the candidate's own span layout.
@@ -163,12 +173,12 @@ def validate_claims(claims: list[Claim], candidate: StoryCandidate, cfg: dict) -
             # A citation is not proof that a DIFFERENT assertion is true.
             # Even a 99% matching sentence can flip 增长 into 下降. The FACT
             # text must equal the exact, contiguous, source-backed quote
-            # (ignoring spacing and punctuation only).
+            # (ignoring whitespace and a limited set of Chinese sentence punctuation only).
             if len(claim.source_spans) != 1:
                 raise ValueError(
                     f"{claim.claim_id}: FACT must have one contiguous source anchor"
                 )
-            if normalize_text(claim.text) != normalize_text(cited):
+            if normalize_fact_quote(claim.text) != normalize_fact_quote(cited):
                 ratio = overlap_ratio(claim.text, cited)
                 raise ValueError(
                     f"{claim.claim_id}: FACT must be an exact source quotation "
