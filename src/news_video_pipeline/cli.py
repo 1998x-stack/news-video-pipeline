@@ -172,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cfg = load_config(args.config)
         if args.command == "validate":
-            print(json.dumps(validate_existing(args.output, cfg), ensure_ascii=False, indent=2))
+            print(json.dumps(validate_existing(args.output, cfg if args.config else None), ensure_ascii=False, indent=2))
             return 0
         if args.command == "editorial":
             return editorial_main(args)

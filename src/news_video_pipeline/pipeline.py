@@ -238,9 +238,16 @@ def verify_manifest(directory: Path) -> dict:
     return manifest
 
 
-def validate_existing(directory: Path, cfg: dict) -> dict:
+def validate_existing(directory: Path, cfg: dict | None = None) -> dict:
     manifest = verify_manifest(directory)
     directory = directory.resolve()
+    # A validation run must use the same media/editorial constraints as the
+    # production run. Otherwise 'news-video validate output/' with default
+    # config can silently validate a custom production under wrong settings.
+    if cfg is None:
+        cfg = manifest.get("config")
+        if not isinstance(cfg, dict) or not isinstance(cfg.get("editorial"), dict):
+            raise ValueError("Manifest has no usable production config for revalidation")
     scenes_data = json.loads((directory / "scenes.json").read_text(encoding="utf-8"))
     scenes = [Scene(**{**scene, "sentences": tuple(scene["sentences"])}) for scene in scenes_data]
     timeline = json.loads((directory / "timeline.json").read_text(encoding="utf-8"))

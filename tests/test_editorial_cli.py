@@ -219,8 +219,13 @@ def test_run_reports_a_pipeline_error_as_exit_code_one(tmp_path: Path, source: P
 
 def test_validate_reports_editorial_metadata(tmp_path: Path, source: Path, fake, capsys):
     out = tmp_path / "results"
+    # This tiny synthetic fixture deliberately targets a short clip. The CLI
+    # validator must recover the actual render config from the manifest rather
+    # than wrongly validating with the default 6-10 minute production window.
+    config_file = tmp_path / "tiny-fixture.yaml"
+    config_file.write_text("editorial:\\n  target_duration_ms: [1, 600000]\\n".replace("\\n", "\n"), encoding="utf-8")
     assert cli.main(["run", "--input", str(source), "--out", str(out), "--tts", "synthetic",
-                     "--editorial", "curated-analysis", "--top-k", "2"]) == 0
+                     "--editorial", "curated-analysis", "--top-k", "2", "--config", str(config_file)]) == 0
     result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert result["result"] == "qa_passed"
     directory = Path(result["directory"])
