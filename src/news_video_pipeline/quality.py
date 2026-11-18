@@ -34,16 +34,45 @@ def transcript_similarity(audio: Path, expected: str, cfg: dict) -> float:
     return difflib.SequenceMatcher(None, normalize(expected), normalize(actual)).ratio()
 
 
-def assert_curated_duration(duration_ms: float, cfg: dict) -> dict:
-    """Strict real-PCM duration gate; never infer completion from script length."""
+def assess_curated_duration(duration_ms: float, cfg: dict) -> dict:
+    """Assess exact PCM duration separately from technical correctness.
+
+    A target is a *preference*, not a reason to suppress a valuable news story.
+    'warn' (default) records deviations and permits a technically valid MP4.
+    'strict' is an explicit product setting that blocks out-of-window output.
+    """
+    import math
+
+    if not math.isfinite(duration_ms) or duration_ms <= 0:
+        raise ValueError("Curated audio duration must be a positive finite number")
     minimum, maximum = map(int, cfg["editorial"]["target_duration_ms"])
-    if not minimum <= duration_ms <= maximum:
+    policy = cfg["editorial"].get("duration_policy", "warn")
+    if policy not in {"warn", "strict"}:
+        raise ValueError(f"Unknown editorial.duration_policy: {policy!r}")
+    status = ("under_target" if duration_ms < minimum
+              else "over_target" if duration_ms > maximum else "within_target")
+    result = {
+        "duration_ms": round(duration_ms),
+        "target_duration_ms": [minimum, maximum],
+        "target_met": status == "within_target",
+        "status": status,
+        "policy": policy,
+        "deviation_ms": round(minimum - duration_ms if duration_ms < minimum
+                              else duration_ms - maximum if duration_ms > maximum else 0),
+        "warning": (None if status == "within_target"
+                    else f"Editorial target not met: {status}; review pace and value before release"),
+    }
+    if policy == "strict" and status != "within_target":
         raise ValueError(
             f"Curated audio duration {duration_ms:.0f} ms is outside the "
-            f"editorial.target_duration_ms window [{minimum}, {maximum}]; "
-            "revise the script or voice settings instead of truncating the audio"
+            f"editorial.target_duration_ms window [{minimum}, {maximum}] (duration_policy=strict)"
         )
-    return {"duration_ms": round(duration_ms), "target_duration_ms": [minimum, maximum], "target_met": True}
+    return result
+
+
+def assert_curated_duration(duration_ms: float, cfg: dict) -> dict:
+    """Backward-compatible entry point; strict rejection is now opt-in."""
+    return assess_curated_duration(duration_ms, cfg)
 
 
 def validate_editorial_artifacts(workspace: Path, scenes: list, cfg: dict) -> dict:
@@ -70,6 +99,16 @@ def validate_editorial_artifacts(workspace: Path, scenes: list, cfg: dict) -> di
     strays = sorted({scene.source_id for scene in scenes if getattr(scene, "source_id", "") not in allowed})
     if strays:
         raise ValueError(f"Scenes narrate story id(s) {strays} that were not selected")
+    semantic_mode = cfg["editorial"].get("semantic_review_mode", "off")
+    if semantic_mode != "off":
+        semantic_path = workspace / "semantic_review.json"
+        if not semantic_path.is_file():
+            raise ValueError("Configured semantic review is missing semantic_review.json")
+        semantic_report = json.loads(semantic_path.read_text(encoding="utf-8"))
+        if semantic_report.get("mode") != semantic_mode or semantic_report.get("independently_fact_verified") is not False:
+            raise ValueError("Semantic review report is missing correct mode or safety metadata")
+        if not semantic_report.get("human_review_required"):
+            raise ValueError("Semantic review must retain the human approval requirement")
     script = (workspace / "editorial_script.md").read_text(encoding="utf-8")
     if len(script.strip()) < 200:
         raise ValueError("editorial_script.md is too short to be a 6-10 minute narration")
@@ -122,7 +161,7 @@ def validate_outputs(workspace: Path, scenes: list, timeline: dict, cfg: dict,
         score = None
     editorial = validate_editorial_artifacts(workspace, scenes, cfg) if editorial_artifacts else None
     if editorial is not None:
-        editorial["duration"] = assert_curated_duration(duration, cfg)
+        editorial["duration"] = assess_curated_duration(duration, cfg)
     return {"status": "passed", "scenes": len(scenes), "cues": count, "audio_duration_ms": round(duration),
             "video_duration_ms": round(rendered_ms), "duration_delta_ms": round(drift), "whisper_similarity": score,
             "editorial": editorial,

@@ -58,7 +58,11 @@ editorial:
   # docs/verification/editorial-selection-e2e.md. Re-measure for another TTS voice;
   # this number converts target_duration_ms into a spoken-character budget.
   speech_chars_per_second: 3.28
-  length_tolerance: 1.0   # compatibility setting; hard max always equals target maximum, not 115%
+  length_tolerance: 1.0   # retained for compatibility; not a release allowance
+  duration_policy: warn   # warn (default: keep valuable longer stories) | strict (opt-in failure)
+  semantic_review_mode: 'off'  # off (no extra API calls) | report (advisory) | strict (blocks unresolved claims)
+  # Target guides editing, never silently drops selected stories or truncates audio.
+
   aggregate_headings:     # programme sections that glue several stories into one block
     - 国内联播快讯
     - 国际联播快讯

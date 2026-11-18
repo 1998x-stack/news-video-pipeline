@@ -72,7 +72,7 @@ def _parse_critique(answer: dict, script: EditorialScript, cfg: dict) -> dict:
 
 def critique_gate(report: dict, cfg: dict) -> None:
     """Raise with the failing dimensions instead of publishing a weak script."""
-    if report.get("length", {}).get("over"):
+    if report.get("length", {}).get("over") and cfg["editorial"].get("duration_policy", "warn") == "strict":
         length = report["length"]
         raise ValueError(
             f"Editorial script is {length['chars']} characters, above the hard ceiling "
@@ -123,7 +123,13 @@ def build_script_with_critique(briefs: list[AnalysisBrief], selection: Editorial
                 assert_selection_grounded(script, candidates, selection, cfg)
             except ValueError:
                 script = original  # a revision that breaks grounding is discarded
+                if not last["failed"] and cfg["editorial"].get("duration_policy", "warn") == "warn":
+                    return original, last
                 break
+    if not last.get("failed") and cfg["editorial"].get("duration_policy", "warn") == "warn":
+        # The quality rubric has passed. Record the length overrun, but do not
+        # delete worthwhile analysis merely to hit an arbitrary minute count.
+        return script, last
     raise ValueError(
         f"Editorial critique still below threshold after {limit} revision(s): "
         f"dimensions={last.get('failed')} length={last.get('length', {}).get('chars')}; "

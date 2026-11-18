@@ -218,3 +218,21 @@ python scripts/prune_staging.py --out outputs --older-than-hours 24 --delete
 ```
 
 暂存清理默认仅预览，执行删除必须指定 `--delete`；已完成产物与活动任务不会被自动清理。快速预览配置不会改变生产默认值，**没有宣称已测得长视频加速效果**。详见 [P1.1 评审与操作指南](docs/verification/p1-longform-runtime.md)。
+
+
+## v0.2 editorial quality review: target length, human labels and semantic triage
+
+Editorial video duration is an editorial **target**, not a hard publication rule by default. New default `editorial.duration_policy: warn` attempts bounded script revisions, then permits a technically valid complete narration even when 6–10 minutes is missed. It records the real PCM duration, target status, and deviation in `qa_report.json` and the Manifest; publication still requires independent human fact/rights/approval review. To opt into strict refusal, explicitly set `editorial.duration_policy: strict`.
+
+Optional second-model-pass semantic risk triage is **disabled by default**, so existing offline tests and paid request counts are unchanged. Set `editorial.semantic_review_mode: report` to obtain `semantic_review.json` with per-claim supported/contradicted/insufficient labels and exact source excerpts; `strict` refuses unresolved FACT/INFERENCE claims. These labels are model-generated warnings **not independent news verification**.
+
+To measure selection quality with independent **human** labels (no scores if labels are missing):
+
+```bash
+python scripts/editorial_evaluate.py template --run-dir outputs/ACTUAL-RUN --out private/a.json
+python scripts/editorial_evaluate.py template --run-dir outputs/ACTUAL-RUN --out private/b.json
+# After two independent people complete all fields and set different annotator_id values:
+python scripts/editorial_evaluate.py evaluate --run-dir outputs/ACTUAL-RUN --labels private/a.json private/b.json --out private/quality.json
+```
+
+See [human evaluation protocol](docs/verification/editorial-human-evaluation.md) and [quality runbook](docs/verification/editorial-quality-next-steps.md). No human labels or real paid semantic-review run have yet been performed by this PR.

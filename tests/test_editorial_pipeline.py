@@ -81,6 +81,15 @@ class FakeEditorialModel:
                 "sections": sections,
                 "closing_synthesis": "几条新闻的共同线索是政策节奏正在向实际需求转化，值得继续观察。",
             }
+        if stage == "semantic_review":
+            return {"reviews": [
+                {"claim_id": claim["claim_id"],
+                 "verdict": "supported" if claim["kind"] == "FACT" else "insufficient",
+                 "evidence_quote": payload["source_text"][:10] if claim["kind"] == "FACT" else "",
+                 "reason": "源文中存在对应事实；推论尚需独立证据",
+                 "flags": [] if claim["kind"] == "FACT" else ["causality"]}
+                for claim in payload["claims"]
+            ]}
         if stage == "critique":
             return {"scores": {dimension: 9 for dimension in
                                ("factual_grounding", "analytical_depth", "original_insight", "clarity",
@@ -250,6 +259,9 @@ def test_curated_duration_is_measured_from_pcm_not_character_count():
     cfg = curated_config()
     cfg["editorial"]["target_duration_ms"] = [360000, 600000]
     assert assert_curated_duration(600000, cfg)["target_met"] is True
+    assert assert_curated_duration(675248, cfg)["status"] == "over_target"
+    assert assert_curated_duration(359999, cfg)["status"] == "under_target"
+    cfg["editorial"]["duration_policy"] = "strict"
     with pytest.raises(ValueError, match="outside the editorial.target_duration_ms"):
         assert_curated_duration(675248, cfg)
     with pytest.raises(ValueError, match="outside the editorial.target_duration_ms"):
@@ -264,8 +276,72 @@ def test_curated_duration_failure_is_detected_before_ffmpeg(tmp_path, monkeypatc
     source.write_text(BODY, encoding="utf-8")
     cfg = curated_config()
     cfg["editorial"]["target_duration_ms"] = [360000, 600000]
+    cfg["editorial"]["duration_policy"] = "strict"
     called = []
     monkeypatch.setattr(pipeline, "render_video", lambda *args: called.append(True))
     with pytest.raises(ValueError, match="outside the editorial.target_duration_ms"):
         run(source, tmp_path / "outputs", cfg, editorial="curated-analysis", top_k=2)
     assert not called, "Video encoding must not start for a duration-invalid curated script"
+
+
+@pytest.mark.skipif(needs_ffmpeg(), reason="ffmpeg not installed")
+def test_default_warn_keeps_technically_valid_short_curated_video(tmp_path: Path, monkeypatch):
+    """Editorial length is a measurable target, not a blanket content veto."""
+    install_fake(monkeypatch, FakeEditorialModel())
+    source = tmp_path / "programme.md"
+    source.write_text(BODY, encoding="utf-8")
+    cfg = curated_config()
+    cfg["editorial"]["target_duration_ms"] = [360000, 600000]
+    assert cfg["editorial"]["duration_policy"] == "warn"
+    output = run(source, tmp_path / "output", cfg, editorial="curated-analysis", top_k=2)
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    qa = json.loads((output / "qa_report.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "qa_passed"
+    assert manifest["public_release_approved"] is False
+    assert manifest["editorial"]["duration"]["target_met"] is False
+    assert manifest["editorial"]["duration"]["status"] == "under_target"
+    assert qa["editorial"]["duration"]["status"] == "under_target"
+    assert validate_existing(output, cfg)["editorial"]["mode"] == "curated-analysis"
+
+
+def test_duration_policy_rejects_nan_and_bad_mode():
+    from news_video_pipeline.quality import assess_curated_duration
+    cfg = curated_config()
+    with pytest.raises(ValueError, match="positive finite"):
+        assess_curated_duration(float("nan"), cfg)
+    cfg["editorial"]["duration_policy"] = "invalid"
+    with pytest.raises(ValueError, match="Unknown editorial.duration_policy"):
+        assess_curated_duration(400000, cfg)
+
+
+@pytest.mark.skipif(needs_ffmpeg(), reason="ffmpeg not installed")
+def test_optional_semantic_report_is_archived_but_never_certifies_facts(tmp_path, monkeypatch):
+    model = FakeEditorialModel()
+    install_fake(monkeypatch, model)
+    source = tmp_path / "programme.md"
+    source.write_text(BODY, encoding="utf-8")
+    cfg = curated_config()
+    cfg["editorial"]["semantic_review_mode"] = "report"
+    result = run(source, tmp_path / "out", cfg, editorial="curated-analysis", top_k=2)
+    sem = json.loads((result / "semantic_review.json").read_text(encoding="utf-8"))
+    manifest = json.loads((result / "manifest.json").read_text(encoding="utf-8"))
+    assert sem["mode"] == "report"
+    assert sem["human_review_required"] is True
+    assert sem["independently_fact_verified"] is False
+    assert sem["insufficient_claim_ids"]
+    assert manifest["public_release_approved"] is False
+    assert "semantic_review.json" in manifest["sha256"]
+    assert validate_existing(result, cfg)["status"] == "passed"
+    assert "semantic_review" in model.calls
+
+
+def test_strict_semantic_review_blocks_unresolved_inference_before_media(tmp_path, monkeypatch):
+    model = FakeEditorialModel()
+    install_fake(monkeypatch, model)
+    source = tmp_path / "programme.md"
+    source.write_text(BODY, encoding="utf-8")
+    cfg = curated_config()
+    cfg["editorial"]["semantic_review_mode"] = "strict"
+    with pytest.raises(ValueError, match="unresolved claims"):
+        run(source, tmp_path / "out", cfg, editorial="curated-analysis", top_k=2)
+    assert not list((tmp_path / "out").glob("programme-*"))

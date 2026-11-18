@@ -97,3 +97,12 @@ answer fails the run; it is never coerced into a plausible one.
 - FACT 引用的规范化只忽略空白和有限的中文句读符号；正负号、百分号和小数点会保留，避免把 -5.2% 与 5.2% 当成相同事实。
 
 - `news-video validate <run-dir>` 现在默认使用 Manifest 中记录的实际生产配置，而非当前机器的默认配置；只有显式传入 `--config` 才覆盖校验配置。这对自定义时长窗口、语音和帧率尤为重要。
+
+
+## Optional review policy (current iteration)
+
+**Time is a quality target, not a censorship gate.** The pipeline first attempts bounded revisions toward 6–10 minutes, then `duration_policy: warn` preserves the information and records `within_target | under_target | over_target` plus real PCM deviation in QA/Manifest. `duration_policy: strict` explicitly opts into refusal. Media stream integrity, fact quotes, numerical attribution, selected-story scope and human approval are unchanged hard checks.
+
+**Semantic assessment is not verification.** `semantic_review_mode: 'off'` is the default and performs no extra LLM calls. `report` performs one bounded, content-addressed review request per selected story, validates the list of known claim IDs and verbatim evidence quotes, stores `semantic_review.json` and retains `human_review_required=true`. `strict` blocks FACT/INFERENCE claims rated contradicted or insufficient by the reviewing model; use it only after calibrating model reliability. The reviewer can make mistakes and shares its source limitations with the generator.
+
+**Human selection quality** uses independent, blinded 0–3 relevance and binary inclusion labels, then computes metrics from both annotators separately with disagreement reporting. No label means no computed metrics; see the evaluation runbook.
