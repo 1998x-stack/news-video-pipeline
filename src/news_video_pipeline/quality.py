@@ -99,6 +99,16 @@ def validate_editorial_artifacts(workspace: Path, scenes: list, cfg: dict) -> di
     strays = sorted({scene.source_id for scene in scenes if getattr(scene, "source_id", "") not in allowed})
     if strays:
         raise ValueError(f"Scenes narrate story id(s) {strays} that were not selected")
+    semantic_mode = cfg["editorial"].get("semantic_review_mode", "off")
+    if semantic_mode != "off":
+        semantic_path = workspace / "semantic_review.json"
+        if not semantic_path.is_file():
+            raise ValueError("Configured semantic review is missing semantic_review.json")
+        semantic_report = json.loads(semantic_path.read_text(encoding="utf-8"))
+        if semantic_report.get("mode") != semantic_mode or semantic_report.get("independently_fact_verified") is not False:
+            raise ValueError("Semantic review report is missing correct mode or safety metadata")
+        if not semantic_report.get("human_review_required"):
+            raise ValueError("Semantic review must retain the human approval requirement")
     script = (workspace / "editorial_script.md").read_text(encoding="utf-8")
     if len(script.strip()) < 200:
         raise ValueError("editorial_script.md is too short to be a 6-10 minute narration")

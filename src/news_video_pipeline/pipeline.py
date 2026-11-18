@@ -23,6 +23,7 @@ from .editorial import insight as editorial_insight
 from .editorial import ranking as editorial_ranking
 from .editorial import scripting as editorial_scripting
 from .editorial import selection as editorial_selection
+from .editorial import semantic as editorial_semantic
 from .editorial.llm import EditorialLLM
 
 EDITORIAL_MODES = ("none", "curated-analysis")
@@ -111,6 +112,12 @@ def build_editorial_assets(title: str, body: str, cfg: dict, stage: Path, output
         "schema_version": 1, "counts": report["counts"],
         "claims": [claim.to_dict() for claim in editorial_insight.all_claims(briefs)],
     })
+    semantic_report = editorial_semantic.semantic_review(briefs, candidates, cfg, llm)
+    if semantic_report["mode"] != "off":
+        atomic_json(stage / "semantic_review.json", semantic_report)
+        print(f"[editorial] 语义风险提示：矛盾 {len(semantic_report['contradiction_claim_ids'])} 条；"
+              f"证据不足 {len(semantic_report['insufficient_claim_ids'])} 条"
+              "（仅模型辅助复核，人工事实核验仍需完成）", flush=True)
     script, critic = editorial_critique.build_script_with_critique(briefs, selection, cfg, llm, candidates)
     print(f"[editorial] 正在生成视频脚本并执行内容批评（未达标维度：{critic['failed'] or '无'}）", flush=True)
     (stage / "editorial_script.md").write_text(script.markdown(), encoding="utf-8")
@@ -123,6 +130,7 @@ def build_editorial_assets(title: str, body: str, cfg: dict, stage: Path, output
         "selection": selection.to_dict(),
         "claims": report["counts"],
         "critic": critic,
+        "semantic": semantic_report,
         "grounding": grounded,
         "llm": llm.summary(),
         "note": "Editorial decisions and technical QA are separate from human fact/rights/release approval.",
@@ -134,6 +142,11 @@ def build_editorial_assets(title: str, body: str, cfg: dict, stage: Path, output
         "insufficient": selection.insufficient,
         "claims": report["counts"],
         "sections": len(script.sections),
+        "semantic_review": {
+            "mode": semantic_report["mode"],
+            "human_review_required": True,
+            "independently_fact_verified": False,
+        },
     }
 
 

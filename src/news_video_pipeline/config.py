@@ -114,6 +114,8 @@ def validate_editorial(editorial: dict) -> dict:
         raise ValueError("editorial.speech_chars_per_second must be in (0, 20]")
     if not 1.0 <= float(editorial["length_tolerance"]) <= 2.0:
         raise ValueError("editorial.length_tolerance must be within 1.0..2.0")
+    if editorial.get("semantic_review_mode", "off") not in {"off", "report", "strict"}:
+        raise ValueError("editorial.semantic_review_mode must be off, report, or strict")
     if editorial.get("duration_policy", "warn") not in {"warn", "strict"}:
         raise ValueError("editorial.duration_policy must be 'warn' or 'strict'")
     window = editorial.get("target_duration_ms")

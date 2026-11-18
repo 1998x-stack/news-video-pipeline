@@ -45,6 +45,7 @@ STAGE_KEYS: dict[str, tuple[str, ...]] = {
     "brief": ("brief",),
     "script": ("opening_hook", "sections", "closing_synthesis"),
     "critique": ("scores",),
+    "semantic_review": ("reviews",),
 }
 
 SYSTEM_PROMPTS: dict[str, str] = {
@@ -110,6 +111,17 @@ SYSTEM_PROMPTS: dict[str, str] = {
         "4) 只讲入选新闻，绝对不要提到未入选的新闻；"
         "5) 不得出现原文之外的数字、日期、机构或引语；推论必须写成推论（例如「这意味着」「一种可能是」），不得说成已证实的事实。"
         "只输出 JSON：{\"opening_hook\":\"...\",\"sections\":[...],\"closing_synthesis\":\"...\"}。不要 Markdown 围栏。"
+    ),
+    "semantic_review": (
+        "你是中文新闻的第二轮语义风险审查员，不是事实认证机构。用户将给你一条新闻的原文和若干已生成的 Claim。"
+        "对每个 claim_id 逐条评估：supported（原文有直接支持）、contradicted（与原文相矛盾）或 "
+        "insufficient（证据不够，无法断定）。特别检查否定、增长下降、主体、数字归属、时间、因果、范围外推。"
+        "不能仅因为文字相似就判断 supported；OPINION/UNKNOWN 通常不能直接从原文证实，需谨慎标不足。"
+        "每条必须输出 claim_id、verdict、reason（明确且具体）、evidence_quote（若支持必须为原文逐字片段）、"
+        "flags（只从 polarity/entity/number/time/causality/scope/unclear 选择）。"
+        "必须覆盖所有 claim，绝不能添加不存在的引用。"
+        "只输出 JSON：{\"reviews\":[{\"claim_id\":\"...\",\"verdict\":\"insufficient\","
+        "\"evidence_quote\":\"\",\"reason\":\"...\",\"flags\":[]}]}。不要 Markdown 围栏。"
     ),
     "critique": (
         "你是新闻内容质量审核员。请针对用户给出的解说稿与分析要点打分并提出**具体可验证**的问题，不要提出新的观点。"
