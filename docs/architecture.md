@@ -85,3 +85,8 @@ flowchart TD
 ## 未来事实核验设计
 
 单独增加 `SourceEvidence`，包含 `source_id, url, published_at, retrieved_at, quote_spans, rights_status, hash`，`StoryClaim` 关联证据和有效期。LLM 的任何分析结论应包含 `fact/inference/unknown` 标记，涉及政策与统计的数字强制二次比对，不能把无来源结果自动提交为真。
+
+
+## v0.1.3 的范围
+
+可选原文分块 LLM 模式为每次调用添加独立字面输入保留与数字遗漏门禁，整体完成时还会全局复检；不等价于语义事实认证。POSIX 主线程采用 SIGALRM 防止长时间流阻塞；非 POSIX/后台线程不支持这一调用模式。结果缓存复用独立 `verify_manifest` 校验。失败暂存不自动清理，运维可用 `scripts/prune_staging.py` 显式处理。视频默认 CFR 不变；预览模式仅调整 fps/preset/CRF。详见 [P1.1 说明](verification/p1-longform-runtime.md)。

@@ -19,3 +19,6 @@
 13. 任何改动至少运行 `python scripts/validate_skills.py` 与 `PYTHONPATH=src pytest -q`；技术验收与人工新闻事实/权利/发布验收严格区分。
 14. LLM 网关参数（`planner.timeout_s`/`max_total_s`/`max_tokens`/`reasoning_effort`）必须显式配置并记入 Manifest；LLM 分镜必须通过 `planner.assert_grounded`，一旦检测到原文没有的数字/日期或匹配率不足，整个任务失败。不得为了“让产物通过”而调低 `min_source_coverage` 或跳过守卫。
 15. SKILL.md / Agent 适配器里反引号写的仓库路径必须真实存在（`validate_skills.py` 会解析校验）；不得写入无法执行的占位脚本或指向不存在文件的引用。
+
+16. 只有在明确启用 `planner.chunk_chars` 的情况下使用长稿多次 LLM 调用；保留原文完整、限制调用次数，每块核查来源数字与保留率，不静默省略。
+17. 不得在无用户明确操作时自动清理 staging；仅提供 `prune_staging.py --delete` 人工显式清理。快速预览不代表生产质量已审核。
