@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "note": "稿纲模板：title / opening_hook / sections / closing_synthesis / story_ids 与 EditorialScript 对齐，用于在写解说稿之前做人工检查；critique 块只放阈值与问题位，scores / failed 由 critique 阶段填写（见 editorial/critique.py）。示例内容为演示，不是真实节目结论。",
+  "title": "政策新闻解读：设备更新补贴与两个地区样本",
+  "story_ids": ["story_002", "story_005", "story_007"],
+  "opening_hook": "（15 秒内）今天最有信息量的一条不是补贴金额，而是核验环节少了一层——这会改变企业的申报选择。",
+  "sections": [
+    {
+      "story_id": "story_002",
+      "kind": "top",
+      "heading": "补贴细则改了什么",
+      "narration": "先讲事实：细则把补贴范围按设备类别划分，申报由两级审批改为一级核验。（依据 story_002_c1）接下来是解释：核验权下移意味着同一类设备在不同地区的认定标准缺少统一复核环节，企业会优先选择口径宽松的地区申报——这是推论，不是原文结论。（依据 story_002_c2）",
+      "based_on_claims": ["story_002_c1", "story_002_c2"],
+      "speaker_notes": "先事实后推论，并且明确说出“这是推论”。"
+    },
+    {
+      "story_id": "story_005",
+      "kind": "supporting",
+      "heading": "（第二条入选新闻）",
+      "narration": "（依据该条 brief 的 FACT 与 INFERENCE 逐句展开，不得引用未入选新闻。）",
+      "based_on_claims": [],
+      "speaker_notes": "只讲入选新闻；未入选新闻的标题与特征表述一律不得出现。"
+    }
+  ],
+  "closing_synthesis": "（20 秒内）只在确有联系时点明几条新闻之间的关系；没有可靠联系就不要强行制造大趋势。",
+  "critique": {
+    "thresholds": {
+      "factual_grounding": 7,
+      "analytical_depth": 6,
+      "original_insight": 5,
+      "clarity": 6,
+      "audience_utility": 5,
+      "uncertainty_handling": 6,
+      "narrative_coherence": 6
+    },
+    "problems": []
+  },
+  "manual_review_required": true,
+  "public_release_approved": false
+}

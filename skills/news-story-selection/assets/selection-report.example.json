@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "top_k": 4,
+  "selected": ["story_002", "story_005", "story_007"],
+  "rejected": [
+    {
+      "story_id": "story_003",
+      "headline": "经济部门就设备更新补贴答记者问",
+      "topic": "economy",
+      "total": 52.5,
+      "weighted_total": 58.1,
+      "confidence": 0.71,
+      "duplicate": true,
+      "low_novelty": true,
+      "weak_evidence": false,
+      "reason": "duplicate"
+    },
+    {
+      "story_id": "story_004",
+      "headline": "某地公布设备更新补贴落实进展",
+      "topic": "economy",
+      "total": 48.0,
+      "weighted_total": 48.0,
+      "confidence": 0.64,
+      "duplicate": false,
+      "low_novelty": false,
+      "weak_evidence": true,
+      "reason": "weak_evidence"
+    },
+    {
+      "story_id": "story_001",
+      "headline": "某部门召开例行会议",
+      "topic": "politics",
+      "total": 41.2,
+      "weighted_total": 41.2,
+      "confidence": 0.8,
+      "duplicate": false,
+      "low_novelty": false,
+      "weak_evidence": false,
+      "reason": "below_min_score"
+    },
+    {
+      "story_id": "story_006",
+      "headline": "某行业发布季度运行数据",
+      "topic": "economy",
+      "total": 56.3,
+      "weighted_total": 56.3,
+      "confidence": 0.42,
+      "duplicate": false,
+      "low_novelty": false,
+      "weak_evidence": false,
+      "reason": "low_confidence"
+    },
+    {
+      "story_id": "story_008",
+      "headline": "国内联播快讯",
+      "topic": "society",
+      "total": 63.4,
+      "weighted_total": 63.4,
+      "confidence": 0.66,
+      "duplicate": false,
+      "low_novelty": false,
+      "weak_evidence": false,
+      "reason": "below_top_k_cut"
+    }
+  ],
+  "insufficient": false,
+  "selection_config": {
+    "top_k": 4,
+    "min_candidates": 3,
+    "shortlist": 6,
+    "min_total_score": 55,
+    "min_confidence": 0.5,
+    "max_topic_share": 0.6,
+    "weights": {
+      "public_impact": 25,
+      "structural_importance": 20,
+      "information_novelty": 15,
+      "analytical_depth": 15,
+      "timeliness": 10,
+      "evidence_quality": 10,
+      "audience_utility": 5
+    }
+  },
+  "notes": [
+    "示例文件：字段与 EditorialSelection 契约一致，用于演示审计脚本输出，不是真实节目结论。",
+    "story_003 与 story_002 讲同一件事但没有新增进展，故以 duplicate 落选；story_004 存在无法解决的事实缺口。",
+    "story_008 是未能逐字切分的聚合块，保留整体并等待人工拆条；它已达标但排在 top_k 之外。",
+    "落选是本模式的产品结果：未入选新闻仍完整保存在 source.txt，只是不进入本期解说。",
+    "权重为初始假设，入选名单仍需人工复核。"
+  ]
+}

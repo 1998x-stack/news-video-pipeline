@@ -22,6 +22,11 @@ planner:
   reasoning_effort: none
   # Grounding guard: narration must stay inside the source text or the run fails.
   min_source_coverage: 0.75
+editorial:
+  # Scored 4 candidates per call. Verified locally: with 8 per call the gateway
+  # sometimes dropped a dimension or nested a reason as an array, which the
+  # fail-closed validator then rejects after a bounded retry.
+  batch_size: 4
 voice:
   provider: espeak
   name: zh

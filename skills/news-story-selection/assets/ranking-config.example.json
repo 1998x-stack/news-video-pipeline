@@ -1,0 +1,45 @@
+{
+  "skill": "news-story-selection",
+  "artifact": "editorial 配置片段（对应 config 的 editorial: 段；字段名与 config.validate_editorial 一致）",
+  "note": "weights 与阈值是初始假设，不是用户验证过的结论；它们必须显式配置、随运行记入 Manifest，并且不得为了“让产物通过”而下调。",
+  "editorial": {
+    "mode": "curated-analysis",
+    "top_k": 4,
+    "min_candidates": 3,
+    "shortlist": 6,
+    "min_total_score": 55,
+    "min_confidence": 0.5,
+    "max_topic_share": 0.6,
+    "batch_size": 4,
+    "max_revisions": 1,
+    "fact_anchor_min": 0.8,
+    "aggregate_headings": ["国内联播快讯", "国际联播快讯"],
+    "target_duration_ms": [360000, 600000],
+    "weights": {
+      "public_impact": 25,
+      "structural_importance": 20,
+      "information_novelty": 15,
+      "analytical_depth": 15,
+      "timeliness": 10,
+      "evidence_quality": 10,
+      "audience_utility": 5
+    },
+    "critique_min": {
+      "factual_grounding": 7,
+      "analytical_depth": 6,
+      "original_insight": 5,
+      "clarity": 6,
+      "audience_utility": 5,
+      "uncertainty_handling": 6,
+      "narrative_coherence": 6
+    }
+  },
+  "hard_invariants": [
+    "weights 必须恰好覆盖七个维度、值为非负整数且合计 100，否则 load_config 报错。",
+    "top_k >= min_candidates >= 1；shortlist >= top_k。",
+    "min_total_score 在 0..100 之间；min_confidence 与 max_topic_share 在 (0, 1] 之间。",
+    "不得通过调低 planner.min_source_coverage 让选题或成片“通过”。"
+  ],
+  "manual_review_required": true,
+  "public_release_approved": false
+}
