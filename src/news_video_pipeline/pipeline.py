@@ -58,10 +58,17 @@ def run(input_path: Path, output_root: Path, cfg: dict, *, force: bool = False, 
     with lock_run(output_root / f".{run_id}.lock"):
         manifest_file = target / "manifest.json"
         if manifest_file.is_file() and not force:
-            existing = json.loads(manifest_file.read_text(encoding="utf-8"))
-            if existing.get("run_id") == run_id and existing.get("status") == "qa_passed":
-                assets = existing.get("sha256", {})
-                if assets and all((target / name).is_file() and file_hash(target / name) == digest for name, digest in assets.items()):
+            try:
+                existing = verify_manifest(target)
+            except (ValueError, OSError, TypeError, json.JSONDecodeError):
+                # A forged, incomplete or damaged cache never counts as success.
+                # Fall through to a fresh staged build, preserving the input.
+                pass
+            else:
+                if (existing.get("run_id") == run_id
+                        and existing.get("engine_version") == __version__
+                        and existing.get("config") == cfg
+                        and existing.get("input_sha256") == file_hash(input_path)):
                     return target
         stage = Path(tempfile.mkdtemp(prefix=f".building-{run_id}-", dir=output_root))
         try:

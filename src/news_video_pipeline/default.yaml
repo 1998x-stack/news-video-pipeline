@@ -30,6 +30,9 @@ render:
   width: 1280
   height: 720
   fps: 25
+  preset: veryfast       # x264 preset; use ultrafast for explicitly lower-quality previews
+  crf: 22                # higher = smaller/faster but lower visual fidelity
+  timeout_s: 1200        # FFmpeg wall time; raise for longer news programs
   font_path: ''
   embed_subtitles: false
 quality:
