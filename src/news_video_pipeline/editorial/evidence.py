@@ -34,7 +34,7 @@ NUMERIC = re.compile(r"\d+(?:[.,]\d+)*")
 # Only non-semantic Chinese sentence punctuation and whitespace may be omitted
 # from an exact quotation. Do NOT drop +, -, decimal points, %, ‰ or other
 # symbols that can reverse numerical meaning.
-NON_SEMANTIC_QUOTE_PUNCTUATION = re.compile(r"[\\s，。！？、；：]+")
+NON_SEMANTIC_QUOTE_PUNCTUATION = re.compile(r"[\s，。！？、；：]+")
 
 
 def normalize_fact_quote(text: str) -> str:
