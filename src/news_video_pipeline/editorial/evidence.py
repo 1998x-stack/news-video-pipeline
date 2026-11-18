@@ -138,8 +138,8 @@ def validate_claims(claims: list[Claim], candidate: StoryCandidate, cfg: dict) -
     anchored in the span they cite (1.0 when there is no FACT claim). It is a
     quotation-integrity measure, not a truth measure.
     """
-    options = cfg["editorial"]
-    minimum = float(options["fact_anchor_min"])
+    # fact_anchor_min is retained as a legacy config field for compatibility;
+    # FACT is now equality-gated rather than threshold-gated.
     counts = {kind: 0 for kind in CLAIM_KINDS}
     source_numbers = set(NUMERIC.findall(candidate.source_text))
     facts = 0
@@ -160,16 +160,22 @@ def validate_claims(claims: list[Claim], candidate: StoryCandidate, cfg: dict) -
                 raise ValueError(
                     f"{claim.claim_id}: number(s) {invented} are not present in its cited source span"
                 )
-            ratio = overlap_ratio(claim.text, cited)
-            exact = normalize_text(claim.text) in normalize_text(cited)
-            if exact:
-                exact_excerpts += 1
-            elif ratio < minimum:
+            # A citation is not proof that a DIFFERENT assertion is true.
+            # Even a 99% matching sentence can flip 增长 into 下降. The FACT
+            # text must equal the exact, contiguous, source-backed quote
+            # (ignoring spacing and punctuation only).
+            if len(claim.source_spans) != 1:
                 raise ValueError(
-                    f"{claim.claim_id}: FACT text is neither a verbatim excerpt of its cited span nor "
-                    f"close to it (overlap {ratio:.2f} < editorial.fact_anchor_min={minimum}). "
-                    "Quote the source verbatim: copy a contiguous fragment, do not paraphrase."
+                    f"{claim.claim_id}: FACT must have one contiguous source anchor"
                 )
+            if normalize_text(claim.text) != normalize_text(cited):
+                ratio = overlap_ratio(claim.text, cited)
+                raise ValueError(
+                    f"{claim.claim_id}: FACT must be an exact source quotation "
+                    f"(anchor overlap {ratio:.2f}); place a paraphrase under "
+                    "INFERENCE with explicit source dependencies instead"
+                )
+            exact_excerpts += 1
             anchored += 1
         else:
             invented = sorted(claim_numbers - source_numbers)

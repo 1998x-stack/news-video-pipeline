@@ -86,3 +86,10 @@ answer fails the run; it is never coerced into a plausible one.
   (aggregate items become `uncertain` containers).
 - Whole-episode LLM planning cost scales with candidate count; `batch_size` and
   `shortlist` bound it, and a re-run reuses the content-addressed cache.
+
+
+## Review hardening (PR #11 follow-up)
+
+- FACT 的代码门禁现在要求 claim.text 与所引 source span 逐字等价（仅忽略标点与空白），不得把相似度 0.6 当作语义蕴含或引用证明。
+- 每条已入选新闻的独立解说段落数字必须存在于该条新闻原文，不能跨已入选新闻借用数字。
+- 6–10 分钟上限不再乘以 1.15 宽容系数；口播文本超过预算会进入有限修订循环并失败。真实 PCM 时间线在 FFmpeg 前和最终 QA 时都要通过严格目标时长检查。原先 11.25 分钟的报告仍不算达标，下一轮需用真实 TTS 重跑。

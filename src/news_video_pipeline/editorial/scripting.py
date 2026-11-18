@@ -61,13 +61,13 @@ def narration_budget(cfg: dict) -> dict:
     options = cfg["editorial"]
     low_ms, high_ms = [int(x) for x in options["target_duration_ms"]]
     rate = float(options["speech_chars_per_second"])
-    tolerance = float(options["length_tolerance"])
     minimum = int(low_ms / 1000 * rate)
     maximum = int(high_ms / 1000 * rate)
     return {
         "min_chars": minimum,
         "max_chars": maximum,
-        "hard_max_chars": int(maximum * tolerance),
+        "hard_max_chars": maximum,  # strict target: tolerance is no longer a release allowance
+        "suggested_max_chars": int(maximum * min(1.0, tolerance)),
         "speech_chars_per_second": rate,
         "target_duration_ms": [low_ms, high_ms],
     }
@@ -227,6 +227,19 @@ def assert_selection_grounded(script: EditorialScript, candidates: list[StoryCan
         raise ValueError(
             f"Script states number(s) {invented} that no selected story contains; refusing to render unverified output"
         )
+    # The global set alone is insufficient: a number from a selected story A
+    # must never be silently attributed to the narration of selected story B.
+    for section in script.sections:
+        candidate = by_id.get(section.story_id)
+        if candidate is None:
+            raise ValueError(f"Script has a section for unknown story {section.story_id}")
+        local_numbers = set(NUMERIC.findall(candidate.source_text))
+        misplaced = sorted(set(NUMERIC.findall(section.narration)) - local_numbers)
+        if misplaced:
+            raise ValueError(
+                f"Script section {section.story_id} includes numbers {misplaced} "
+                "not present in that story's source (cross-story attribution)"
+            )
     leaked: list[str] = []
     for candidate in candidates:
         if candidate.story_id in selection.selected:

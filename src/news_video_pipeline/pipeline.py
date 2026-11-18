@@ -12,7 +12,7 @@ from pathlib import Path
 from . import __version__
 from .models import Scene
 from .planner import plan, read_input
-from .quality import file_hash, validate_outputs
+from .quality import assert_curated_duration, file_hash, validate_outputs
 from .slides import render_slides
 from .timeline import make_audio_and_timeline, write_srt
 from .tts import encode_mp3
@@ -182,6 +182,9 @@ def run(input_path: Path, output_root: Path, cfg: dict, *, force: bool = False, 
             timeline = make_audio_and_timeline(scenes, cfg, stage, output_root / ".cache" / "tts")
             encode_mp3(stage / "audio" / "narration.wav", stage / "audio" / "narration.mp3")
             write_srt(timeline, stage / "subtitles" / "zh.srt")
+            if cfg["editorial"]["mode"] == "curated-analysis":
+                # Check actual PCM-derived duration before expensive FFmpeg work.
+                assert_curated_duration(timeline["duration_samples"] * 1000 / timeline["sample_rate"], cfg)
             print(f"[3/5] TTS + SRT: {timeline['duration_ms']} ms", flush=True)
             render_video(images, timeline, stage / "audio" / "narration.wav", stage / "video" / "landscape.mp4", cfg)
             print("[4/5] rendered MP4", flush=True)

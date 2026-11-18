@@ -163,3 +163,24 @@ def test_brief_claim_report_is_serialisable():
     import json
 
     json.dumps(report, ensure_ascii=False)
+
+
+def test_fact_rejects_high_overlap_polarity_reversal(cfg):
+    """Even near-identical text can reverse an important factual conclusion."""
+    source = "今天发布数据，经济增长保持稳定。"
+    story = candidate(text=source)
+    quote = "经济增长保持稳定"
+    start = source.index(quote)
+    reversed_claim = Claim(
+        claim_id="claim_polarity", story_id="story_001", kind="FACT",
+        text="经济下降保持稳定",
+        source_spans=(SourceSpan(start, start + len(quote)),),
+    )
+    with pytest.raises(ValueError, match="exact source quotation"):
+        evidence.validate_claims([reversed_claim], story, cfg)
+
+
+def test_fact_rejects_paraphrase_even_at_low_config_threshold(cfg):
+    cfg["editorial"]["fact_anchor_min"] = 0.01
+    with pytest.raises(ValueError, match="exact source quotation"):
+        evidence.validate_claims([fact(text="前三季度国内生产总值同比升高5.2%")], candidate(), cfg)

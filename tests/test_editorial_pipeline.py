@@ -115,7 +115,9 @@ def curated_config() -> dict:
     cfg["render"]["height"] = 360
     cfg["planner"]["max_scenes"] = 14
     cfg["editorial"].update({"top_k": 2, "min_candidates": 1, "shortlist": 6, "min_total_score": 50,
-                             "batch_size": 6, "max_revisions": 1})
+                             "batch_size": 6, "max_revisions": 1,
+                             # Synthetic E2E tests cannot require six minutes of tone.
+                             "target_duration_ms": [1, 600000]})
     return cfg
 
 
@@ -241,3 +243,29 @@ def test_curated_report_records_cost_and_grounding(tmp_path: Path, monkeypatch):
     assert report["grounding"]["leaked_unselected_stories"] == []
     assert report["critic"]["failed"] == []
     assert report["claims"]["FACT"] >= 1
+
+
+def test_curated_duration_is_measured_from_pcm_not_character_count():
+    from news_video_pipeline.quality import assert_curated_duration
+    cfg = curated_config()
+    cfg["editorial"]["target_duration_ms"] = [360000, 600000]
+    assert assert_curated_duration(600000, cfg)["target_met"] is True
+    with pytest.raises(ValueError, match="outside the editorial.target_duration_ms"):
+        assert_curated_duration(675248, cfg)
+    with pytest.raises(ValueError, match="outside the editorial.target_duration_ms"):
+        assert_curated_duration(359999, cfg)
+
+
+def test_curated_duration_failure_is_detected_before_ffmpeg(tmp_path, monkeypatch):
+    """A short real PCM narration must fail early rather than encoding a video."""
+    model = FakeEditorialModel()
+    install_fake(monkeypatch, model)
+    source = tmp_path / "programme.md"
+    source.write_text(BODY, encoding="utf-8")
+    cfg = curated_config()
+    cfg["editorial"]["target_duration_ms"] = [360000, 600000]
+    called = []
+    monkeypatch.setattr(pipeline, "render_video", lambda *args: called.append(True))
+    with pytest.raises(ValueError, match="outside the editorial.target_duration_ms"):
+        run(source, tmp_path / "outputs", cfg, editorial="curated-analysis", top_k=2)
+    assert not called, "Video encoding must not start for a duration-invalid curated script"

@@ -34,6 +34,18 @@ def transcript_similarity(audio: Path, expected: str, cfg: dict) -> float:
     return difflib.SequenceMatcher(None, normalize(expected), normalize(actual)).ratio()
 
 
+def assert_curated_duration(duration_ms: float, cfg: dict) -> dict:
+    """Strict real-PCM duration gate; never infer completion from script length."""
+    minimum, maximum = map(int, cfg["editorial"]["target_duration_ms"])
+    if not minimum <= duration_ms <= maximum:
+        raise ValueError(
+            f"Curated audio duration {duration_ms:.0f} ms is outside the "
+            f"editorial.target_duration_ms window [{minimum}, {maximum}]; "
+            "revise the script or voice settings instead of truncating the audio"
+        )
+    return {"duration_ms": round(duration_ms), "target_duration_ms": [minimum, maximum], "target_met": True}
+
+
 def validate_editorial_artifacts(workspace: Path, scenes: list, cfg: dict) -> dict:
     """Check the curated-mode trail, including that no dropped story reached the video."""
     from .pipeline import EDITORIAL_ARTIFACTS
@@ -109,6 +121,8 @@ def validate_outputs(workspace: Path, scenes: list, timeline: dict, cfg: dict,
     else:
         score = None
     editorial = validate_editorial_artifacts(workspace, scenes, cfg) if editorial_artifacts else None
+    if editorial is not None:
+        editorial["duration"] = assert_curated_duration(duration, cfg)
     return {"status": "passed", "scenes": len(scenes), "cues": count, "audio_duration_ms": round(duration),
             "video_duration_ms": round(rendered_ms), "duration_delta_ms": round(drift), "whisper_similarity": score,
             "editorial": editorial,

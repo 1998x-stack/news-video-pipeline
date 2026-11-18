@@ -58,7 +58,7 @@ editorial:
   # docs/verification/editorial-selection-e2e.md. Re-measure for another TTS voice;
   # this number converts target_duration_ms into a spoken-character budget.
   speech_chars_per_second: 3.28
-  length_tolerance: 1.15  # a script may exceed the upper budget by this factor before it fails
+  length_tolerance: 1.0   # compatibility setting; hard max always equals target maximum, not 115%
   aggregate_headings:     # programme sections that glue several stories into one block
     - 国内联播快讯
     - 国际联播快讯

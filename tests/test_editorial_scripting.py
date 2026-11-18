@@ -226,7 +226,7 @@ def test_narration_budget_converts_the_duration_window(cfg):
     assert budget["target_duration_ms"] == [360000, 600000]
     assert budget["min_chars"] == int(360 * 3.28)
     assert budget["max_chars"] == int(600 * 3.28)
-    assert budget["hard_max_chars"] == int(budget["max_chars"] * 1.15)
+    assert budget["hard_max_chars"] == budget["max_chars"]
 
 
 def test_check_length_flags_an_over_long_script(cfg, briefs, selection):
@@ -349,3 +349,24 @@ def test_build_script_with_critique_discards_a_revision_that_breaks_grounding(cf
     })
     with pytest.raises(ValueError, match="still below threshold"):
         critique_module.build_script_with_critique(briefs, selection, cfg, llm, candidates)
+
+
+def test_script_rejects_cross_story_number_attribution(cfg, selection):
+    candidates = [candidate("story_001", "经济数据发布", SOURCE_A, 1, "c1"),
+                  candidate("story_002", "出口数据发布", SOURCE_B, 2, "c2")]
+    script = scripting.EditorialScript(
+        title="主编解读", opening_hook="今天我们看看两组数据。",
+        sections=(
+            scripting.EditorialSection("story_001", "经济", "前三季度国内生产总值同比增长6.1%。", "top"),
+            scripting.EditorialSection("story_002", "出口", "出口同比增长5.2%。", "supporting"),
+        ),
+        closing_synthesis="继续观察数据。", body="source", story_ids=tuple(selection.selected)
+    )
+    with pytest.raises(ValueError, match="cross-story attribution"):
+        scripting.assert_selection_grounded(script, candidates, selection, cfg)
+
+
+def test_budget_no_longer_allows_fifteen_percent_overrun(cfg):
+    cfg["editorial"]["length_tolerance"] = 1.15
+    budget = scripting.narration_budget(cfg)
+    assert budget["hard_max_chars"] == budget["max_chars"]
