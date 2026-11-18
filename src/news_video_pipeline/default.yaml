@@ -60,7 +60,7 @@ editorial:
   speech_chars_per_second: 3.28
   length_tolerance: 1.0   # retained for compatibility; not a release allowance
   duration_policy: warn   # warn (default: keep valuable longer stories) | strict (opt-in failure)
-  semantic_review_mode: off  # off (no extra API calls) | report (advisory) | strict (blocks unresolved claims)
+  semantic_review_mode: 'off'  # off (no extra API calls) | report (advisory) | strict (blocks unresolved claims)
   # Target guides editing, never silently drops selected stories or truncates audio.
 
   aggregate_headings:     # programme sections that glue several stories into one block
