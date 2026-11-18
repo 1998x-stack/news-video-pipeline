@@ -67,7 +67,7 @@ def narration_budget(cfg: dict) -> dict:
         "min_chars": minimum,
         "max_chars": maximum,
         "hard_max_chars": maximum,  # strict target: tolerance is no longer a release allowance
-        "suggested_max_chars": int(maximum * min(1.0, tolerance)),
+        "suggested_max_chars": maximum,
         "speech_chars_per_second": rate,
         "target_duration_ms": [low_ms, high_ms],
     }
